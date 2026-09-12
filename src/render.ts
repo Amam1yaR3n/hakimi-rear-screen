@@ -367,7 +367,6 @@ export class Renderer {
             this.ellipse(sx(p.x), sy(p.y), p.size, p.size, p.color); c.restore();
         }
         c.restore();
-        this.lenses();
         if (this.noticeLife > 0) { c.save(); c.globalAlpha = Math.min(1, this.noticeLife * 3); this.box(493, 119, 190, 32, '#303b2de8', 10); this.text(this.notice, 588, 135, 16, '#ffe3a1', 'center'); c.restore(); }
         if (g.bombFlash > 0) { c.fillStyle = `rgba(255,232,163,${g.bombFlash * .55})`; c.fillRect(0, 0, W, H); }
         this.chestArrows(g, ox, oy);
@@ -392,6 +391,8 @@ export class Renderer {
             c.restore();
         }
         if (this.chestLife > 0) { c.save(); c.globalAlpha = Math.min(1, this.chestLife * 5); this.text('宝箱开启！', 588, 145 - (1 - this.chestLife / .6) * 10, 19, '#ffe5a0', 'center'); c.restore(); }
+        // Physical camera cutouts stay blank and fixed above every canvas effect.
+        this.lenses();
     }
     chestArrows(g: Game, ox: number, oy: number) {
         for (const d of g.drops) {
@@ -446,8 +447,6 @@ export class Renderer {
     hud(g: Game) {
         this.cameraRing(143, this.xp, '#bed984');
         this.cameraRing(429, this.hp, this.hp <= .25 ? '#f07868' : '#e7a394');
-        this.text(`经验 · Lv.${g.level}`, 135.6, 220, 11, '#bed984', 'center');
-        this.text(`生命 · ${Math.ceil(Math.max(0, g.player.hp))}/${g.maxHP}`, 135.6, 506, 11, '#e7a394', 'center');
         this.box(15, 267, 241, 38, this.hover === 'details' ? '#fff7e5' : '#f2eddcee', 8);
         this.text('能力', 36, 286, 11, '#505943', 'center');
         for (let slot = 0; slot < 4; slot++) {
@@ -456,10 +455,10 @@ export class Renderer {
             else { this.icon(id, x, 271, 29); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, 286, 11, '#505943', 'center'); }
         }
         if (g.mode === 'playing') this.buttons.push({ x: 15, y: 267, w: 241, h: 38, action: 'details' });
-        this.text(this.time(g.time), 588, 53, 27, '#303a2d', 'center', 800);
-        this.text('击败 ' + g.kills, 875, 51, 15, '#39442f', 'right');
-        this.button(769, 75, 48, 29, this.muted ? '音 ×' : '音 ♪', 'mute');
-        this.button(825, 75, 51, 29, '暂停', 'pause');
+        this.text(this.time(g.time), 588, 27, 27, '#303a2d', 'center', 800);
+        this.text('击败 ' + g.kills, 875, 25, 15, '#39442f', 'right');
+        this.button(769, 49, 48, 29, this.muted ? '音 ×' : '音 ♪', 'mute');
+        this.button(825, 49, 51, 29, '暂停', 'pause');
     }
     backdrop() { this.c.fillStyle = '#1e261cc9'; this.c.fillRect(0, 0, W, H); }
     panel(title: string, subtitle: string, body: () => void) { this.backdrop(); this.c.save(); this.c.globalAlpha = this.entrance(); this.box(316, 126, 545, 332, '#202a20', 18, '#566147'); this.text(title, 588, 183, 31, '#e9ead7', 'center', 800); this.text(subtitle, 588, 222, 13, '#aeba98', 'center'); body(); this.c.restore(); }
@@ -495,10 +494,5 @@ export class Renderer {
     }
     lenses() { for (const y of [143, 429]) {
         this.ellipse(135.6, y, 114.4, 114.4, '#111510');
-        this.ellipse(135.6, y, 105, 105, '#1d221c', '#353d30');
-        this.ellipse(135.6, y, 87, 87, '#111610');
-        this.ellipse(135.6, y, 52, 52, '#151f1b', '#25352d');
-        this.ellipse(135.6, y, 31, 31, '#0c1413');
-        this.ellipse(123, y - 14, 9, 13, '#36554a55');
     } }
 }

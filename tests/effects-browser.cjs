@@ -10,8 +10,8 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   r.effect('bomb',0,0);r.draw(g,.016);r.lenses=lenses;r.newAttacks=attacks;
   return {before,flash,camera,world};
  });
- assert.ok(result.flash[0]>result.before[0]);assert.deepEqual(result.camera,result.world);assert.ok(result.camera.some(v=>v!==0));
+ assert.deepEqual(result.flash,result.before);assert.deepEqual(result.camera,[0,0]);assert.ok(result.world.some(v=>v!==0));
  await page.screenshot({path:'artifacts/fullscreen-flash-shake.png'});
  await page.evaluate(()=>{const {game:g}=window.__hakimi;g.start();g.mode='ready';g.weapons=[1,6,7,8];g.weapons.forEach(i=>g.levels[i]=1);g.levels[17]=5;g.paws=[{x:-100,y:-100,radius:45,age:.18}];g.trucks=[{x:130,y:-125,dx:1,dy:0,life:4,damage:60,hit:new Set()}];g.gums=[{x:127.5,y:0,hits:new Map()}];});
- await page.waitForTimeout(50);await page.screenshot({path:'artifacts/attack-range-max.png'});assert.deepEqual(errors,[]);await browser.close();console.log('Camera flash and shared shake verified; max-range visuals rendered without errors');
+ await page.waitForTimeout(50);await page.screenshot({path:'artifacts/attack-range-max.png'});assert.deepEqual(errors,[]);await browser.close();console.log('Camera cutouts remain blank and fixed during flash and shake; max-range visuals rendered without errors');
 })().catch(e=>{console.error(e);process.exit(1)});
