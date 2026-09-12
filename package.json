@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",
-    "test:browser": "node tests/browser.cjs"
+    "test:browser": "node tests/browser.cjs && node tests/abilities-browser.cjs && node tests/chest-browser.cjs && node tests/effects-browser.cjs"
   },
   "devDependencies": {
     "typescript": "~5.8.3",
