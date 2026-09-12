@@ -455,10 +455,10 @@ export class Renderer {
             else { this.icon(id, x, 271, 29); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, 286, 11, '#505943', 'center'); }
         }
         if (g.mode === 'playing') this.buttons.push({ x: 15, y: 267, w: 241, h: 38, action: 'details' });
-        this.text(this.time(g.time), 588, 27, 27, '#303a2d', 'center', 800);
-        this.text('击败 ' + g.kills, 875, 25, 15, '#39442f', 'right');
-        this.button(769, 49, 48, 29, this.muted ? '音 ×' : '音 ♪', 'mute');
-        this.button(825, 49, 51, 29, '暂停', 'pause');
+        this.text(this.time(g.time), SAFE + 16, 27, 27, '#303a2d', 'left', 800);
+        this.text('击败 ' + g.kills, 588, 27, 15, '#39442f', 'center');
+        this.button(769, 12, 48, 29, this.muted ? '音 ×' : '音 ♪', 'mute');
+        this.button(825, 12, 51, 29, '暂停', 'pause');
     }
     backdrop() { this.c.fillStyle = '#1e261cc9'; this.c.fillRect(0, 0, W, H); }
     panel(title: string, subtitle: string, body: () => void) { this.backdrop(); this.c.save(); this.c.globalAlpha = this.entrance(); this.box(316, 126, 545, 332, '#202a20', 18, '#566147'); this.text(title, 588, 183, 31, '#e9ead7', 'center', 800); this.text(subtitle, 588, 222, 13, '#aeba98', 'center'); body(); this.c.restore(); }
