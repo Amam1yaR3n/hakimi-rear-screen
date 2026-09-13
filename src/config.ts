@@ -26,7 +26,7 @@ export const ITEMS: Item[] = [
     { name: '经验加成', short: '经', color: '#ddd48c', desc: '每级获取经验增加 10%', kind: 'passive', maxLevel: 5 },
     { name: '吸取范围', short: '吸', color: '#a6d8cc', desc: '每级吸取范围增加 20%', kind: 'passive', maxLevel: 5 },
     { name: '持续时间', short: '时', color: '#b7b7e1', desc: '糖块、卡车、猫耳、蜂蜜、曼波持续＋10%', kind: 'passive', maxLevel: 5 },
-    { name: '子弹速度', short: '飞', color: '#9bbce1', desc: '糖块、卡车、绿豆速度及蜂蜜海成长＋10%', kind: 'passive', maxLevel: 5 },
+    { name: '子弹速度', short: '飞', color: '#9bbce1', desc: '糖块、卡车、猫耳、绿豆速度及蜂蜜海成长＋10%', kind: 'passive', maxLevel: 5 },
     { name: '攻击范围', short: '范', color: '#b1d6a3', desc: '范围每级＋10%，叮咚鸡除外', kind: 'passive', maxLevel: 5 },
     { name: '妙脆角', short: '耳', color: '#c9b69a', desc: '旋转猫耳向上抛射，穿透沿途敌人', kind: 'weapon', maxLevel: 8, evo: '妙脆角·满天脆', prerequisite: ID.attack },
     { name: '叮咚鸡', short: '鸡', color: '#f1ce75', desc: '突脸清屏，概率保留本次击杀掉落', kind: 'weapon', maxLevel: 8, evo: '叮咚鸡·开饭', prerequisite: ID.luck },

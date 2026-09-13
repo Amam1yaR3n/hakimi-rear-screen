@@ -93,7 +93,7 @@ export class Game {
     nextEnemyId = 1;
     reviveUsed = false;
     pending: { delay: number; run: () => void }[] = [];
-    paws: { x: number; y: number; radius: number; age: number }[] = [];
+    paws: { x: number; y: number; radius: number; age: number; angle: number }[] = [];
     trucks: { x: number; y: number; dx: number; dy: number; life: number; damage: number; hit: Set<number> }[] = [];
     gums: { x: number; y: number; hits: Map<number, number> }[] = [];
     gumLife = 0;
@@ -121,7 +121,8 @@ export class Game {
     get amount() { return this.levels[ID.amount]; }
     get attackRange() { return 1 + this.levels[ID.range] * .1; }
     get hissRange() { return (105 + (this.legacyLevel(ID.hiss) - 1) * 6 + (this.evolved[ID.hiss] ? 12 : 0)) * this.attackRange; }
-    get auraRange() { return (55 + this.legacyLevel(ID.aura) * 9) * this.attackRange; }
+    get auraRange() { return (55 + this.legacyLevel(ID.aura) * 9) * (this.evolved[ID.aura] ? 1.25 : 1) * this.attackRange; }
+    get auraDamage() { return (5 + this.legacyLevel(ID.aura) * 3) * 1.25 * (this.evolved[ID.aura] ? 1.2 : 1) * this.attack; }
     get duration() { return 1 + this.levels[ID.duration] * .1; }
     get projectileSpeed() { return 1 + this.levels[ID.projectileSpeed] * .1; }
     get luck() { return this.levels[ID.luck]; }
@@ -133,7 +134,8 @@ export class Game {
             count: (evolved ? 8 : 1 + Math.floor((l - 1) / 2)) + this.amount,
             interval: (evolved ? 2.3 : 3 - .1 * (l - 1)) * this.cooldown,
             life: (evolved ? 3 : 2 + .1 * (l - 1)) * this.duration,
-            radius: (evolved ? 20 : 14) * this.attackRange };
+            radius: (evolved ? 20 : 14) * this.attackRange,
+            speed: (evolved ? 230 : 260) * this.projectileSpeed };
     }
     get beanStats() {
         const l = this.levels[ID.bean], e = this.evolved[ID.bean];
@@ -382,8 +384,8 @@ export class Game {
     }
     schedule(delay: number, run: () => void) { if (delay <= 0) run(); else this.pending.push({ delay, run }); }
     visibleEnemies() { return this.enemies.filter(e => e.alive && e.x - this.player.x + ANCHOR.x >= SAFE && e.x - this.player.x + ANCHOR.x <= W && e.y - this.player.y + ANCHOR.y >= 0 && e.y - this.player.y + ANCHOR.y <= H); }
-    pawStrike(x: number, y: number, radius: number, damage: number) {
-        this.paws.push({ x, y, radius, age: 0 });
+    pawStrike(x: number, y: number, radius: number, damage: number, angle = 0) {
+        this.paws.push({ x, y, radius, age: 0, angle });
         // Give the falling paw a brief, readable wind-up before impact.
         this.schedule(.18, () => { for (const e of this.grid.query(x, y, radius)) this.damage(e, damage); this.onSound('hit'); });
     }
@@ -406,15 +408,18 @@ export class Game {
         const x = this.player.x + (side === 0 ? -ANCHOR.x - 90 * this.attackRange : side === 1 ? W - ANCHOR.x + 90 * this.attackRange : 0);
         const y = this.player.y + (side === 2 ? -ANCHOR.y - 90 * this.attackRange : side === 3 ? H - ANCHOR.y + 90 * this.attackRange : 0);
         const count = (this.evolved[ID.truck] ? 3 : 1);
-        for (let i = 0; i < count; i++) this.schedule(i * .4, () => this.trucks.push({ x, y, dx, dy, life: 4 * this.duration, damage: (60 + 15 * (this.levels[ID.truck] - 1)) * this.attack, hit: new Set() }));
+        for (let i = 0; i < count; i++) {
+            const offset = (i - (count - 1) / 2) * 76 * this.attackRange;
+            this.trucks.push({ x: x - dy * offset, y: y + dx * offset, dx, dy, life: 4 * this.duration, damage: (60 + 15 * (this.levels[ID.truck] - 1)) * this.attack, hit: new Set() });
+        }
     }
     summonEars() {
         const stats = this.earStats, evolved = this.evolved[ID.ear];
         for (let i = 0; i < stats.count; i++) {
             const angle = evolved ? -Math.PI / 2 + i * Math.PI * 2 / stats.count
                 : -Math.PI / 2 + (stats.count === 1 ? 0 : (i / (stats.count - 1) - .5) * Math.PI / 2);
-            this.ears.push({ x: this.player.x, y: this.player.y, vx: Math.cos(angle) * (evolved ? 230 : 260),
-                vy: Math.sin(angle) * (evolved ? 230 : 260), gravity: evolved ? 0 : 300,
+            this.ears.push({ x: this.player.x, y: this.player.y, vx: Math.cos(angle) * stats.speed,
+                vy: Math.sin(angle) * stats.speed, gravity: evolved ? 0 : 300,
                 life: stats.life, angle, radius: stats.radius, damage: stats.damage, hit: new Set() });
         }
     }
@@ -486,8 +491,8 @@ export class Game {
             }
         }
         if (this.levels[ID.aura] && this.cd[ID.aura] <= 0) {
-            const l = this.legacyLevel(ID.aura), targets = this.grid.query(this.player.x, this.player.y, this.auraRange);
-            for (const e of targets) this.damage(e, (5 + l * 3) * this.attack);
+            const targets = this.grid.query(this.player.x, this.player.y, this.auraRange);
+            for (const e of targets) this.damage(e, this.auraDamage);
             if (this.evolved[ID.aura] && targets.length) this.player.hp = Math.min(this.maxHP, this.player.hp + 1.5);
             this.cd[ID.aura] = .55 * this.cooldown;
         }
@@ -506,7 +511,7 @@ export class Game {
                     if (!available.length) available.push(...all);
                     const e = available.splice(Math.floor(this.rng() * available.length), 1)[0], x = e.x, y = e.y, radius = (30 + 3 * (l - 1)) * this.attackRange, damage = (20 + 5 * (l - 1)) * this.attack;
                     this.pawStrike(x, y, radius, damage);
-                    if (this.evolved[ID.paw]) this.schedule(.35, () => this.pawStrike(x, y, radius, damage));
+                    if (this.evolved[ID.paw]) this.schedule(.35, () => this.pawStrike(x, y, radius, damage, Math.PI / 4));
                 }
                 this.cd[ID.paw] = (4 - .2 * (l - 1)) * this.cooldown;
             }
@@ -556,20 +561,20 @@ export class Game {
         if (id === ID.revive) return this.reviveUsed ? '已消耗 · 本局不再获得' : '半血复活一次 · 三秒无敌';
         const passive: Record<number, string> = {
             [ID.range]: `攻击范围（叮咚鸡除外） +${l * 10}%`, [ID.cooldown]: `攻击冷却 −${l * 8}%`, [ID.recovery]: `每秒恢复 ${fmt(l * .35)} 生命`, [ID.health]: `最大生命 +${l * 20}`,
-            [ID.attack]: `伤害（叮咚鸡除外） +${l * 10}%`, [ID.amount]: `攻击数量 +${l}（光环、大运、叮咚鸡、曼波除外）`, [ID.move]: `移动速度 / 蜂蜜海移动与成长 +${l * 10}%`, [ID.xp]: `经验获取 +${l * 10}%`, [ID.pickup]: `吸取范围 +${l * 20}%`, [ID.duration]: `糖块 / 卡车 / 猫耳 / 蜂蜜 / 曼波持续 +${l * 10}%`, [ID.projectileSpeed]: `糖块转速 / 卡车车速 / 绿豆速度 / 蜂蜜海移动与成长 +${l * 10}%`,
+            [ID.attack]: `伤害（叮咚鸡除外） +${l * 10}%`, [ID.amount]: `攻击数量 +${l}（光环、大运、叮咚鸡、曼波除外）`, [ID.move]: `移动速度 / 蜂蜜海移动与成长 +${l * 10}%`, [ID.xp]: `经验获取 +${l * 10}%`, [ID.pickup]: `吸取范围 +${l * 20}%`, [ID.duration]: `糖块 / 卡车 / 猫耳 / 蜂蜜 / 曼波持续 +${l * 10}%`, [ID.projectileSpeed]: `糖块转速 / 卡车车速 / 猫耳速度 / 绿豆速度 / 蜂蜜海移动与成长 +${l * 10}%`,
         };
         if (id === ID.luck) return `道具掉率 +${l * 20}% · 三项/五项宝箱 ${25 + l * 3}%/${5 + l}% · 双倍小米 ${l * 10}%`;
         if (ITEMS[id].kind === 'passive') return passive[id];
         if (id === ID.bean) { const s = this.beanStats; return `${s.count}颗/批 · 伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 每颗命中${s.pierce}敌 · 速度${fmt(s.speed)} · 半径${fmt(s.radius)} · 寿命3秒 · 持续时间无效`; }
         if (id === ID.honey) { const s = this.honeyStats; return `${s.count}罐/批 · 每0.5秒伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 持续${fmt(s.life)}秒 · 半径${fmt(s.radius)} · ${this.evolved[id] ? '向角色汇聚并扩大至两倍；子弹速度、移动速度增强成长' : '固定地面；子弹速度、移动速度无效'} · 无减速；吸取范围仅为进化条件`; }
         if (id === ID.mambo) { const s = this.mamboStats; return `每1秒伤害${fmt(s.damage)} · 宽度${fmt(s.width)} · 持续${fmt(s.life)}秒 · 间隔${fmt(s.interval)}秒 · ${this.evolved[id] ? '减速50%持续2秒，刷新不叠加；' : ''}数量、子弹速度无效`; }
-        if (id === ID.ear) { const s = this.earStats; return `${s.count} 枚${this.evolved[id] ? '径向' : '抛射'}猫耳 · 伤害 ${fmt(s.damage)} · 间隔 ${fmt(s.interval)} 秒 · 寿命 ${fmt(s.life)} 秒 · 半径 ${fmt(s.radius)} · 每枚每敌命中一次`; }
+        if (id === ID.ear) { const s = this.earStats; return `${s.count} 枚${this.evolved[id] ? '径向' : '抛射'}猫耳 · 伤害 ${fmt(s.damage)} · 间隔 ${fmt(s.interval)} 秒 · 寿命 ${fmt(s.life)} 秒 · 半径 ${fmt(s.radius)} · 初速 ${fmt(s.speed)} · 每枚每敌命中一次`; }
         if (id === ID.chicken) return `间隔 ${fmt(this.chickenCooldown)} 秒 · 普通秒杀 / 精英最大生命30% · ${this.evolved[id] ? '稳定掉落、小米×2，结束吸取全部小米' : `整次保留掉落 ${fmt(this.chickenRetention * 100)}%`} · 保留已有物品和精英宝箱 · 仅冷却加成`;
-        if (id === ID.paw) return `${1 + Math.floor((l - 1) / 2) + this.amount} 次落爪 · 伤害 ${fmt((20 + 5 * (l - 1)) * this.attack)} · 间隔 ${fmt((4 - .2 * (l - 1)) * this.cooldown)} 秒${this.evolved[id] ? ' · 二连拍' : ''}`;
+        if (id === ID.paw) return `${1 + Math.floor((l - 1) / 2) + this.amount} 次落爪 · 伤害 ${fmt((20 + 5 * (l - 1)) * this.attack)} · 间隔 ${fmt((4 - .2 * (l - 1)) * this.cooldown)} 秒${this.evolved[id] ? ' · 先竖直、再左下45°二连拍，范围一致' : ''}`;
         if (id === ID.gum) return `${1 + Math.floor((l - 1) / 2) + this.amount} 块糖 · 伤害 ${fmt((8 + 2 * (l - 1)) * this.attack)} · ${this.evolved[id] ? '永久环绕' : `持续 ${fmt((3 + .25 * (l - 1)) * this.duration)} 秒`}`;
-        if (id === ID.truck) return `${(this.evolved[id] ? 3 : 1)} 辆车 · 伤害 ${fmt((60 + 15 * (l - 1)) * this.attack)} · 间隔 ${fmt((10 - .5 * (l - 1)) * this.cooldown)} 秒`;
+        if (id === ID.truck) return `${this.evolved[id] ? '3 辆车并排' : '1 辆车'} · 伤害 ${fmt((60 + 15 * (l - 1)) * this.attack)} · 间隔 ${fmt((10 - .5 * (l - 1)) * this.cooldown)} 秒`;
         const k = this.legacyLevel(id);
-        return id === ID.aura ? `每 ${fmt(.55 * this.cooldown)} 秒造成 ${fmt((5 + k * 3) * this.attack)} 伤害` : `${1 + this.amount} 次${id === ID.hiss ? '声波' : '挥爪'} · 伤害 ${fmt((id === ID.hiss ? 6 + k * 3 : 17 + k * 10) * this.attack)}`;
+        return id === ID.aura ? `每 ${fmt(.55 * this.cooldown)} 秒造成 ${fmt(this.auraDamage)} 伤害 · 半径 ${fmt(this.auraRange)}` : `${1 + this.amount} 次${id === ID.hiss ? '声波' : '挥爪'} · 伤害 ${fmt((id === ID.hiss ? 6 + k * 3 : 17 + k * 10) * this.attack)}`;
     }
     tick(dt: number, input = { x: 0, y: 0 }) {
         if (this.mode === 'chest') { this.chestAge = Math.min(this.chestDuration, this.chestAge + dt); return; }

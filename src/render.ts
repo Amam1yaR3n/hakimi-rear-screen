@@ -2,6 +2,7 @@ import { Game, SLASH_DURATION, CHICKEN_IMPACT, CHICKEN_DURATION } from './game';
 import type { EliteHiss } from './game';
 import { W, H, SAFE, ANCHOR, ITEMS, ID, ELITE_HISS } from './config';
 import { characterSprite } from './sprites';
+import { drawAbilityIcon } from './icons';
 export type Button = {
     x: number;
     y: number;
@@ -12,6 +13,9 @@ export type Button = {
 export class Renderer {
     buttons: Button[] = [];
     hover = '';
+    private detailsScroll = 0;
+    private detailsMaxScroll = 0;
+    readonly detailsViewport = { x: 326, y: 132, w: 520, h: 364 };
     pressed = '';
     private clock = 0;
     private modeAge = 0;
@@ -53,9 +57,9 @@ export class Renderer {
     } }
     text(s: string, x: number, y: number, size = 14, color = '#eee9d8', align: CanvasTextAlign = 'left', weight = 600) { const c = this.c; c.fillStyle = color; c.font = `${weight} ${size}px "PingFang SC","Microsoft YaHei",sans-serif`; c.textAlign = align; c.textBaseline = 'middle'; c.fillText(s, x, y); }
     line(x: number, y: number, x2: number, y2: number, color: string, width = 2) { const c = this.c; c.beginPath(); c.moveTo(x, y); c.lineTo(x2, y2); c.strokeStyle = color; c.lineWidth = width; c.stroke(); }
-    ellipse(x: number, y: number, rx: number, ry: number, color: string, stroke = '') { const c = this.c; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fillStyle = color; c.fill(); if (stroke) {
+    ellipse(x: number, y: number, rx: number, ry: number, color: string, stroke = '', width = 2.8) { const c = this.c; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fillStyle = color; c.fill(); if (stroke) {
         c.strokeStyle = stroke;
-        c.lineWidth = 2.8;
+        c.lineWidth = width;
         c.stroke();
     } }
     poly(points: number[][], color: string, stroke = '#242823') { const c = this.c; c.beginPath(); points.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fillStyle = color; c.fill(); if (stroke) {
@@ -65,41 +69,76 @@ export class Renderer {
         c.stroke();
     } }
     spinosaurus(x: number, y: number, scale = 1, flash = false, t = 0, movement = 0, lean = 0) {
-        const c = this.c, ink = '#202720', fur = flash ? '#fff9d5' : '#969b85';
+        const c = this.c, ink = '#202720';
+        const fur = flash ? '#fff9d5' : '#969b85', shade = flash ? '#eee6c5' : '#79836e';
+        const cream = flash ? '#fffef0' : '#ede9d9', stripe = flash ? '#c8c5a6' : '#626e58';
         c.save(); c.translate(x, y); c.scale(scale, scale);
         c.rotate(lean + Math.sin(t * 7) * .025 * movement);
-        this.ellipse(0, 28, 37, 7, '#00000028');
-        // Braced legs and a high arched back retain Hakimi's grey-green tabby palette.
-        for (const [legX, footX] of [[-24, -30], [-12, -9], [17, 22], [29, 35]]) {
-            this.line(legX, 0, footX, 25 + Math.sin(t * 10 + legX) * 2 * movement, ink, 10);
-            this.line(legX, 0, footX, 25 + Math.sin(t * 10 + legX) * 2 * movement, fur, 6);
-            this.ellipse(footX, 27, 6, 3, '#ede9d9', ink);
+        c.lineJoin = 'round'; c.lineCap = 'round';
+        const finish = (color: string, outlined = true) => {
+            c.fillStyle = color; c.fill();
+            if (outlined) { c.strokeStyle = ink; c.lineWidth = 2.8; c.stroke(); }
+        };
+        this.ellipse(0, 28, 39, 7, '#00000028');
+        // A filled, tapering tail keeps the silhouette smooth even at pickup size.
+        c.beginPath(); c.moveTo(-25,-15);
+        c.bezierCurveTo(-44,-29,-48,-8,-44,11);
+        c.quadraticCurveTo(-42,24,-38,23);
+        c.quadraticCurveTo(-36,22,-39,13);
+        c.bezierCurveTo(-42,-4,-38,-14,-29,-5); c.closePath(); finish(fur);
+        const leg = (hipX: number, footX: number, phase: number, far: boolean) => {
+            const footY = 25 + Math.sin(t * 10 + phase) * 2 * movement;
+            c.beginPath(); c.moveTo(hipX-5,-3);
+            c.quadraticCurveTo(hipX-6,10,footX-5,footY);
+            c.quadraticCurveTo(footX,footY+5,footX+5,footY);
+            c.lineTo(hipX+5,1); c.closePath(); finish(far ? shade : fur);
+            this.ellipse(footX+1,footY+1,7,4,far ? shade : cream,ink);
+            if (!far) this.line(footX+2,footY,footX+2,footY+2,stripe,1.2);
+        };
+        leg(-16,-13,1,true); leg(22,31,4,true);
+        // One uninterrupted arch replaces the former seven triangular fur spikes.
+        c.beginPath(); c.moveTo(-29,7);
+        c.bezierCurveTo(-35,-18,-26,-47,-10,-47);
+        c.bezierCurveTo(7,-49,13,-32,20,-19);
+        c.quadraticCurveTo(32,-8,26,9);
+        c.quadraticCurveTo(15,13,4,3);
+        c.quadraticCurveTo(-13,-7,-29,7); c.closePath(); finish(fur);
+        c.beginPath(); c.moveTo(-22,-1);
+        c.quadraticCurveTo(-8,-13,8,-3);
+        c.quadraticCurveTo(19,4,24,-7);
+        c.quadraticCurveTo(28,7,23,9);
+        c.quadraticCurveTo(9,4,4,3);
+        c.quadraticCurveTo(-11,-5,-22,2); c.closePath(); finish(cream,false);
+        // Three broad tabby marks, inset from the outer contour.
+        for (const [sx,sy] of [[-22,-30],[-12,-39],[-1,-35]]) {
+            c.beginPath(); c.moveTo(sx-2,sy); c.quadraticCurveTo(sx+1,sy-2,sx+4,sy+1);
+            c.lineTo(sx+5,sy+14); c.quadraticCurveTo(sx+1,sy+12,sx-2,sy); c.closePath(); finish(stripe,false);
         }
-        c.beginPath(); c.moveTo(-26, -12); c.quadraticCurveTo(-44, -20, -39, 23);
-        c.strokeStyle = ink; c.lineWidth = 10; c.stroke();
-        c.strokeStyle = fur; c.lineWidth = 6; c.stroke();
-        c.beginPath(); c.moveTo(-29, 5);
-        c.bezierCurveTo(-34, -53, 3, -62, 19, -22);
-        c.quadraticCurveTo(29, -7, 25, 8);
-        c.quadraticCurveTo(0, -11, -29, 5);
-        c.fillStyle = fur; c.fill(); c.strokeStyle = ink; c.lineWidth = 2.8; c.stroke();
-        for (const [px, py] of [[-29, -20], [-26, -30], [-21, -38], [-14, -44], [-6, -46], [2, -43], [9, -36]])
-            this.poly([[px - 4, py + 4], [px - 2, py - 9], [px + 6, py + 3]], fur, ink);
-        for (const bx of [-18, -8, 2]) this.line(bx, -31, bx + 4, -16, '#666e59', 4);
-        this.poly([[16, -9], [12, -24], [29, -15]], fur);
-        this.poly([[32, -14], [42, -22], [42, -3]], fur);
-        this.ellipse(30, -1, 18, 17, fur, ink);
-        this.ellipse(32, 7, 15, 9, '#ede9d9');
-        this.line(22, -15, 24, -8, '#666e59', 3);
-        this.line(29, -16, 30, -9, '#666e59', 3);
-        for (const ex of [24, 37]) {
-            this.ellipse(ex, -3, 4.5, 5.5, ink);
-            this.ellipse(ex - 1, -5, 1.4, 1.4, '#fff');
+        leg(-24,-29,0,false); leg(16,22,3,false);
+        // Slightly oversized face, folded-out ears and wide eyes sell the bluff.
+        this.poly([[15,-8],[10,-27],[28,-18]],fur,ink);
+        this.poly([[31,-18],[44,-26],[46,-6]],fur,ink);
+        this.poly([[16,-15],[14,-22],[23,-17]],flash ? cream : '#c2b0a1','');
+        this.poly([[36,-17],[41,-21],[42,-12]],flash ? cream : '#c2b0a1','');
+        this.ellipse(30,-1,20,18,fur,ink);
+        this.ellipse(31,8,16,9,cream);
+        for (const [sx,sy] of [[23,-16],[30,-17],[36,-15]])
+            this.poly([[sx-2,sy],[sx+2,sy],[sx+1,sy+7]],stripe,'');
+        for (const ex of [22,38]) {
+            this.ellipse(ex,-3,6.2,7,cream,ink,1.8);
+            this.ellipse(ex+.5,-2,2.6,4.8,ink);
+            this.ellipse(ex-.3,-4,1,1.3,'#fff');
         }
-        this.poly([[28, 4], [34, 4], [31, 8]], '#686b62', '');
-        this.ellipse(31, 11, 4, 3, ink);
-        this.line(17, 6, 8, 3, '#ede9d9', 1);
-        this.line(43, 6, 51, 3, '#ede9d9', 1);
+        this.line(16,-12,22,-13,stripe,2);
+        this.line(37,-13,43,-11,stripe,2);
+        this.poly([[27,4],[34,4],[30.5,8]],flash ? shade : '#806f64','');
+        this.line(30.5,8,30.5,10,ink,1.4);
+        this.ellipse(30.5,12,3.8,4,ink);
+        this.ellipse(30.5,14,2.3,1.3,flash ? cream : '#c49b8d');
+        for (const side of [-1,1]) {
+            this.line(30+side*12,6,30+side*23,3,cream,1.3);
+            this.line(30+side*13,9,30+side*22,11,cream,1.3);
+        }
         c.restore();
     }
     character(type: number, x: number, y: number, scale = 1, flash = false, t = 0, movement = 1, lean = 0, hissing = false) {
@@ -171,39 +210,8 @@ export class Renderer {
         c.restore();
     }
     button(x: number, y: number, w: number, h: number, label: string, action: string, primary = false) { const hovered = this.hover === action; const c = this.c; c.save(); if (this.pressed === action) { c.translate(x + w / 2, y + h / 2); c.scale(.96, .96); c.translate(-x - w / 2, -y - h / 2); } this.box(x, y, w, h, primary ? (hovered ? '#d5ef94' : '#c1de7a') : (hovered ? '#424b3d' : '#2b332c'), 8, primary ? '' : '#515c49'); this.text(label, x + w / 2, y + h / 2, 14, primary ? '#20271b' : '#dedfcd', 'center', 700); c.restore(); this.buttons.push({ x, y, w, h, action }); }
-    icon(id: number, x: number, y: number, size = 29) {
-        const c = this.c, ink = '#303e35'; c.save(); c.translate(x, y); c.scale(size / 40, size / 40);
-        this.box(0, 0, 40, 40, ITEMS[id].color, 8);
-        c.lineCap = 'round';
-        const ring = (x: number, y: number, r: number) => this.ellipse(x, y, r, r, 'transparent', ink);
-        const arc = (r: number, start: number, end: number) => { c.beginPath(); c.arc(19, 21, r, start, end); c.strokeStyle = ink; c.lineWidth = 2.5; c.stroke(); };
-        switch (id) {
-            case ID.paw: this.whitePaw(20, 28, .42); break;
-            case ID.hiss: for (const r of [7, 13, 19]) arc(r, -.8, .8); this.ellipse(9, 21, 3, 4, ink); break;
-            case ID.aura: ring(20, 21, 13); ring(20, 21, 8); this.poly([[20,10],[24,21],[20,29],[16,21]], '#fff7d9', ''); break;
-            case ID.claw: for (let i = 0; i < 3; i++) this.poly([[9+i*8,30],[14+i*8,12],[19+i*8,8],[14+i*8,31]], '#fff6dc', ink); break;
-            case ID.bean: this.ellipse(15,23,6,9,'#658d35',ink); this.ellipse(27,15,5,8,'#d2eaa0',ink); this.line(13,19,15,25,'#e3efbc',2); break;
-            case ID.honey: this.honeyJar(20,23,1); break;
-            case ID.mambo: this.text('♫',20,21,29,'#fff1c5','center'); break;
-            case ID.ear: this.catEar(20, 21, 15, -.15); break;
-            case ID.chicken: this.chickenFace(20, 23, .22); break;
-            case ID.luck: for (const [x,y] of [[14,14],[26,14],[14,25],[26,25]]) this.ellipse(x,y,7,7,'#e5f4b7',ink); this.line(20,22,25,35,ink,2); break;
-            case ID.cooldown: ring(20,22,12); this.line(20,22,20,14,ink,2.5); this.line(20,22,27,25,ink,2.5); this.line(16,5,24,5,ink,3); break;
-            case ID.recovery: this.box(16,8,8,25,'#fff5eb',2); this.box(8,16,24,8,'#fff5eb',2); break;
-            case ID.health: this.poly([[20,33],[6,19],[7,11],[14,8],[20,13],[26,8],[33,11],[34,19]], '#fff0dc', ink); break;
-            case ID.gum: this.poly([[5,14],[12,18],[12,24],[5,28]],'#fff0e9',ink); this.poly([[35,14],[28,18],[28,24],[35,28]],'#fff0e9',ink); this.box(11,12,18,17,'#fff0e9',5,ink); this.line(16,16,24,16,'#d584ac',2); break;
-            case ID.truck: this.box(5,12,20,16,'#e8eee0',2,ink); this.box(25,17,10,11,'#5197ad',2,ink); this.box(27,18,6,5,'#def9ef',1); for (const x of [11,29]) this.ellipse(x,29,4,4,ink); break;
-            case ID.attack: this.poly([[10,30],[25,7],[32,6],[31,13],[15,33]],'#fff5d9',ink); this.line(9,23,21,32,ink,3); break;
-            case ID.amount: for (const x of [10,20,30]) { this.box(x-3,13,6,18,'#fff3cf',3,ink); this.poly([[x-3,13],[x,7],[x+3,13]],ink,''); } break;
-            case ID.revive: arc(13, -.5, 4.6); this.poly([[17,4],[24,8],[16,12]],ink,''); this.line(19,16,19,28,'#fff6eb',3); this.line(13,22,25,22,'#fff6eb',3); break;
-            case ID.move: this.poly([[14,8],[23,9],[21,23],[33,27],[32,32],[9,32],[9,25]],'#f3f7d9',ink); this.line(4,14,10,14,ink,2); this.line(3,20,8,20,ink,2); break;
-            case ID.xp: this.poly([[20,6],[24,15],[34,16],[27,23],[29,33],[20,28],[11,33],[13,23],[6,16],[16,15]],'#fff6c6',ink); break;
-            case ID.pickup: arc(12,0,Math.PI); this.box(7,9,6,13,'#eef9e9',1,ink); this.box(25,9,6,13,'#eef9e9',1,ink); this.ellipse(20,9,2,2,ink); break;
-            case ID.duration: this.line(10,7,30,7,ink,3); this.line(10,33,30,33,ink,3); this.poly([[12,9],[28,9],[25,16],[20,20],[25,24],[28,31],[12,31],[15,24],[20,20],[15,16]],'#f6f1df',ink); break;
-            case ID.range: ring(20,20,8); for (const [dx,dy] of [[1,1],[1,-1],[-1,1],[-1,-1]]) { this.line(20+dx*9,20+dy*9,20+dx*15,20+dy*15,ink,2); this.line(20+dx*15,20+dy*15,20+dx*8,20+dy*15,ink,2); this.line(20+dx*15,20+dy*15,20+dx*15,20+dy*8,ink,2); } break;
-            case ID.projectileSpeed: this.poly([[16,13],[28,13],[35,20],[28,27],[16,27]],'#eef7ef',ink); for (const y of [14,20,26]) this.line(5,y,12,y,ink,2); break;
-        }
-        c.restore();
+    icon(id: number, x: number, y: number, size = 29, evolved = false) {
+        drawAbilityIcon(this.c, id, x, y, size, evolved);
     }
     catEar(x: number, y: number, radius: number, angle: number) {
         const c = this.c; c.save(); c.translate(x,y); c.rotate(angle); c.scale(radius / 20, radius / 20);
@@ -291,7 +299,9 @@ export class Renderer {
             c.save(); c.globalAlpha = Math.min(1, (.55 - p.age) / .18);
             this.ellipse(x, y, p.radius, p.radius * .6, '#fffce34a', '#f7f3d299');
             if (progress === 1) { c.strokeStyle = '#fffbe8'; c.lineWidth = 3; c.beginPath(); c.ellipse(x, y, p.radius * (1 + (p.age - .18) * 2), p.radius * .65, 0, 0, Math.PI * 2); c.stroke(); }
-            this.whitePaw(x, y - (1 - progress) * 130, p.radius / 30); c.restore();
+            // Only the paw's approach and orientation change; both impacts share the same area.
+            c.translate(x, y); c.rotate(p.angle);
+            this.whitePaw(0, -(1 - progress) * 130, p.radius / 30); c.restore();
         }
         c.restore();
     }
@@ -361,8 +371,6 @@ export class Renderer {
                 c.strokeStyle = '#70232be6'; c.lineWidth = 6; c.stroke();
                 const pulse = .78 + .22 * Math.sin(progress * Math.PI * 12);
                 c.strokeStyle = `rgba(255, 76, 83, ${pulse})`; c.lineWidth = 3; c.stroke();
-                this.box(-49, -66, 98, 22, '#48252bec', 6);
-                this.text(`哈气蓄力 ${hiss.remaining.toFixed(1)}`, 0, -55, 12, '#ffe5de', 'center');
             } else {
                 const progress = Math.max(0, Math.min(1, 1 - hiss.remaining / ELITE_HISS.recovery));
                 // The whole warned area flashes at impact; expanding rings are visual only.
@@ -465,15 +473,7 @@ export class Renderer {
             }
         }
         this.honeyGround(g, ox, oy);
-        if (g.levels[1]) {
-            const radius = g.auraRange;
-            this.ellipse(ANCHOR.x, ANCHOR.y, radius, radius, g.evolved[1] ? '#a0ac623a' : '#a99bd72b');
-            c.strokeStyle = '#9985bb88';
-            c.lineWidth = 2;
-            c.beginPath();
-            c.arc(ANCHOR.x, ANCHOR.y, radius, 0, Math.PI * 2);
-            c.stroke();
-        }
+        if (g.levels[ID.aura]) this.auraVisual(ANCHOR.x, ANCHOR.y, g.auraRange, g.evolved[ID.aura]);
         this.eliteHisses(g, ox, oy, false);
         for (const e of [...g.enemies].sort((a, b) => a.y - b.y)) {
             if (!e.alive) continue;
@@ -501,14 +501,7 @@ export class Renderer {
         for (const wave of g.waves) {
             c.save();
             c.globalAlpha = Math.min(1, (1 - wave.radius / wave.maxRadius) * 2);
-            for (let i = 0; i < 3; i++) {
-                const radius = wave.radius - i * 15;
-                if (radius <= 0) continue;
-                c.beginPath(); c.arc(sx(wave.x), sy(wave.y), radius, wave.angle - wave.halfAngle, wave.angle + wave.halfAngle);
-                c.strokeStyle = i === 0 ? '#f0fff6' : '#b5f1df';
-                c.lineWidth = 4 - i;
-                c.stroke();
-            }
+            this.sonicBands(sx(wave.x), sy(wave.y), wave.radius, wave.angle, wave.halfAngle, g.evolved[ID.hiss]);
             c.restore();
         }
         this.newAttacks(g, ox, oy);
@@ -541,13 +534,13 @@ export class Renderer {
         this.hud(g);
         if (g.mode !== 'playing' && g.mode !== 'ready') this.buttons = [];
         if (g.mode === 'chest') this.chestPanel(g);
-        if (g.mode === 'details') this.backdrop();
+        if (g.mode === 'details') this.detailsPanel(g);
         if (g.mode === 'choice')
             this.choices(g);
         else if (g.mode === 'paused')
-            this.panel('稍息，基米。', '', () => { this.button(426, 290, 320, 46, '继续生存', 'resume', true); this.button(426, 350, 320, 40, '重新校准', 'calibrate'); });
+            this.panel('稍息，基米。', '', () => { this.button(426, 290, 320, 46, '继续生存', 'resume', true); this.button(426, 350, 320, 40, '重新校准', 'calibrate'); this.button(426, 404, 320, 34, '能力与被动', 'details'); });
         else if (g.mode === 'evolution')
-            this.panel('进 化 完 成', ITEMS[g.lastEvolution].name + '  →  ' + ITEMS[g.lastEvolution].evo, () => { this.icon(g.lastEvolution, 560, 255, 54); this.text('现在，轮到它们害怕了。', 588, 333, 16, '#c3c9ab', 'center'); this.button(446, 379, 284, 45, '继续生存', 'resume', true); });
+            this.panel('进 化 完 成', ITEMS[g.lastEvolution].name + '  →  ' + ITEMS[g.lastEvolution].evo, () => { this.icon(g.lastEvolution, 560, 255, 54, true); this.text('现在，轮到它们害怕了。', 588, 333, 16, '#c3c9ab', 'center'); this.button(446, 379, 284, 45, '继续生存', 'resume', true); });
         else if (g.mode === 'over')
             this.panel(g.won ? '十分钟，猫还在。' : '这次先活到这里。', g.won ? '生存成功 / SURVIVED' : '挑战结束 / GAME OVER', () => { c.save(); c.globalAlpha = this.entrance(.12); this.text(`${this.time(g.time)}   ·   击败 ${g.kills}   ·   Lv.${g.level}`, 588, 282, 22, '#d3e49e', 'center'); this.text('最佳生存  ' + this.time(Math.max(this.best, g.time)), 588, 324, 13, '#a7b09a', 'center'); c.restore(); c.save(); c.globalAlpha = this.entrance(.24); this.button(446, 369, 284, 46, '再来一局', 'start', true); c.restore(); });
         if (g.mode === 'evolution' && this.modeAge < .7) {
@@ -562,10 +555,69 @@ export class Renderer {
         // Physical camera cutouts stay blank and fixed above every canvas effect.
         this.lenses();
     }
-    honeyJar(x: number, y: number, scale: number) {
+    private auraVisual(x: number, y: number, radius: number, evolved: boolean, icon = false) {
+        const c = this.c;
+        c.save(); c.translate(x, y);
+        this.ellipse(0, 0, radius, radius, icon ? '#7961a844' : '#a99bd718');
+        // Keep the outer edge on the actual damage radius; all decoration sits inside it.
+        c.lineWidth = icon ? 2 : 1.5;
+        this.ellipse(0, 0, radius - c.lineWidth / 2, radius - c.lineWidth / 2, 'transparent', '#8873bbaa', c.lineWidth);
+        c.lineWidth = icon ? 3 : 5;
+        this.ellipse(0, 0, radius * .88, radius * .88, 'transparent', '#cbb9ee77', c.lineWidth);
+        c.lineWidth = icon ? 1.5 : 2;
+        this.ellipse(0, 0, radius * .73, radius * .73, 'transparent', evolved ? '#dde8a9bb' : '#b7a0db66', c.lineWidth);
+        const count = icon ? 4 : 6, size = icon ? 2 : 3.5;
+        for (let i = 0; i < count; i++) {
+            const angle = i * Math.PI * 2 / count + Math.PI / 6;
+            const px = Math.cos(angle) * radius * .8, py = Math.sin(angle) * radius * .8;
+            this.poly([[px,py-size],[px+size*.65,py],[px,py+size],[px-size*.65,py]], evolved ? '#f0efc8cc' : '#e5d9f6bb', '');
+        }
+        if (icon) this.poly([[0,-5],[3,0],[0,5],[-3,0]], evolved ? '#fff4c9' : '#fff0ee', '');
+        c.restore();
+    }
+    private sonicBands(x: number, y: number, radius: number, angle: number, halfAngle: number, evolved: boolean, icon = false) {
+        const c = this.c, spacing = icon ? 6 : 15;
+        c.save(); c.translate(x, y); c.rotate(angle); c.lineJoin = 'round'; c.lineCap = 'round';
+        for (let i = 0; i < (evolved ? 4 : 3); i++) {
+            const r = radius - i * spacing;
+            if (r <= 1) continue;
+            const thickness = Math.min(r * .38, icon ? 3 : 7 - i * .8);
+            // A tapered inner curve gives the wave a broad center and fine tips.
+            c.beginPath(); c.arc(0, 0, r, -halfAngle, halfAngle);
+            for (let step = 16; step >= 0; step--) {
+                const t = step / 16, a = -halfAngle + t * halfAngle * 2;
+                const inner = r - thickness * (.18 + .82 * Math.sin(Math.PI * t));
+                c.lineTo(Math.cos(a) * inner, Math.sin(a) * inner);
+            }
+            c.closePath(); c.fillStyle = i === 0 ? '#e1fff1' : i % 2 ? '#9cdcc6' : '#c4f1dd'; c.fill();
+            c.strokeStyle = icon ? '#548a76' : '#69aa9188'; c.lineWidth = icon ? .8 : 1; c.stroke();
+        }
+        if (radius > spacing) {
+            const r = Math.max(2, radius - spacing * 1.5), size = icon ? 1.8 : Math.min(3.5, radius * .035);
+            for (const side of [-1, 1]) {
+                const a = side * halfAngle * .6;
+                this.ellipse(Math.cos(a)*r, Math.sin(a)*r, size*1.6, size, '#d8f8e9aa');
+            }
+        }
+        c.restore();
+    }
+    honeyJar(x: number, y: number, scale: number, evolved = false) {
         const c = this.c; c.save(); c.translate(x, y); c.scale(scale, scale);
-        this.box(-10,-11,20,24,'#e9aa39',5,'#775020'); this.box(-12,-16,24,7,'#f5db9b',2,'#775020');
-        this.box(-7,-4,14,11,'#fff0b7',3); this.text('蜜',0,2,9,'#81591e','center'); c.restore();
+        c.lineWidth = 1.6; c.lineJoin = 'round';
+        c.beginPath(); c.moveTo(-7,-11); c.quadraticCurveTo(-12,-8,-12,-3);
+        c.lineTo(-11,8); c.quadraticCurveTo(-11,13,-6,13); c.lineTo(6,13);
+        c.quadraticCurveTo(11,13,11,8); c.lineTo(12,-3); c.quadraticCurveTo(12,-8,7,-11); c.closePath();
+        c.fillStyle = evolved ? '#d99b2e' : '#edb449'; c.fill(); c.strokeStyle = '#795328'; c.stroke();
+        this.box(-8,5,16,5,evolved ? '#bf7d25' : '#d79a32',3);
+        this.box(-10,-12,20,5,'#f7d987',2,'#795328');
+        this.box(-12,-16,24,6,evolved ? '#ecce79' : '#f5dfaa',2,'#795328');
+        this.line(-8,-14,7,-14,'#fff2c7',1.5);
+        this.box(4,-10,4,9,'#ffdb70',2);
+        this.ellipse(6,-1,2,2.5,'#ffdb70');
+        this.line(-8,-5,-8,2,'#fff0b5',2);
+        this.box(-6,-3,13,11,'#fff0bd',3,'#c9913c');
+        this.text('蜜',.5,2.5,9,'#81591e','center');
+        c.restore();
     }
     honeyGround(g: Game, ox: number, oy: number) {
         const c = this.c;
@@ -573,8 +625,31 @@ export class Renderer {
             const x = pool.x + ox, y = pool.y + oy;
             if (pool.fall > 0) { this.ellipse(x,y,pool.radius,pool.radius,'#e6b44c18','#c9a45755'); continue; }
             c.save(); c.globalAlpha = Math.min(1,pool.life * 3);
-            this.ellipse(x,y,pool.radius,pool.radius,pool.evolved ? '#e8b33866' : '#e4a33955','#d29b3a99');
-            this.ellipse(x-pool.radius*.25,y-pool.radius*.25,pool.radius*.3,pool.radius*.12,'#ffedb777'); c.restore();
+            const r = pool.radius;
+            // Stable scallops stay within 4% of the circular hit area, without random shimmer.
+            c.beginPath();
+            for (let i = 0; i <= 64; i++) {
+                const a = i / 64 * Math.PI * 2;
+                const edge = r * (.98 + .02 * Math.cos(a * 8));
+                const px = x + Math.cos(a) * edge, py = y + Math.sin(a) * edge;
+                if (i === 0) c.moveTo(px,py); else c.lineTo(px,py);
+            }
+            c.closePath(); c.fillStyle = pool.evolved ? '#d99a304d' : '#edb64a42'; c.fill();
+            c.strokeStyle = '#bb832c99'; c.lineWidth = 1.5; c.stroke();
+            this.ellipse(x+r*.12,y+r*.16,r*.66,r*.55,pool.evolved ? '#c8872426' : '#dca03322');
+            this.ellipse(x-r*.26,y-r*.32,r*.3,r*.1,'#fff0b77d');
+            this.ellipse(x+r*.37,y+r*.24,r*.17,r*.055,'#ffe4a066');
+            c.lineWidth = 1;
+            for (const [dx,dy,size] of [[-.48,.18,.055],[.2,-.42,.07],[.48,-.12,.04]]) {
+                this.ellipse(x+r*dx,y+r*dy,r*size,r*size,'#ffe8a344','#c48c3b88',1);
+            }
+            if (pool.evolved) {
+                c.lineCap = 'round'; c.lineWidth = 2; c.strokeStyle = '#ffe3a077';
+                for (let i = 0; i < 2; i++) {
+                    c.beginPath(); c.ellipse(x,y,r*(.55+i*.2),r*(.48+i*.2),-.25,.15,1.6); c.stroke();
+                }
+            }
+            c.restore();
         }
         for (const wave of g.mamboWaves) {
             c.save(); c.beginPath(); c.rect(ANCHOR.x-wave.width/2,0,wave.width,H); c.clip();
@@ -593,7 +668,7 @@ export class Renderer {
             const c=this.c; c.save();c.translate(b.x+ox,b.y+oy);c.rotate(Math.atan2(b.vy,b.vx));
             this.ellipse(0,0,b.radius,b.radius,'#83b644','#45642e');this.line(-b.radius*.4,-b.radius*.2,b.radius*.4,-b.radius*.2,'#e2efb1',1);c.restore();
         }
-        for(const p of g.honeyPools) if(p.fall>0) this.honeyJar(p.x+ox,p.y+oy-150*p.fall/.35,Math.max(.6,p.initialRadius/50));
+        for(const p of g.honeyPools) if(p.fall>0) this.honeyJar(p.x+ox,p.y+oy-150*p.fall/.35,Math.max(.6,p.initialRadius/50),p.evolved);
     }
     chestArrows(g: Game, ox: number, oy: number) {
         for (const d of g.drops) {
@@ -638,11 +713,80 @@ export class Renderer {
             const visible = done || age >= .7+i*(count===5?.65:.55), x=start+i*(width+gap);
             this.box(x,300,width,112,'#303d30',9,visible ? color : '#4d5945');
             if (!visible) { this.text('✦',x+width/2,352,24,'#65715b','center'); return; }
-            this.icon(r.id,x+width/2-18,310,36);
+            this.icon(r.id,x+width/2-18,310,36,r.kind==='evolution' || g.evolved[r.id]);
             this.text(r.kind==='heal'?'生命恢复':r.kind==='evolution'?ITEMS[r.id].evo!:ITEMS[r.id].name,x+width/2,365,count===5?12:15,'#f5f0df','center');
             this.text(r.kind==='heal'?'+30 生命':r.kind==='evolution'?'进化完成':`Lv.${r.level-1} → ${r.level}`,x+width/2,391,12,color,'center');
         });
         this.buttons = [{ x: 0, y: 0, w: W, h: H, action: 'chest' }];
+    }
+    resetDetails() { this.detailsScroll = 0; this.detailsMaxScroll = 0; this.hover = this.pressed = ''; }
+    scrollDetails(delta: number) {
+        this.detailsScroll = Math.max(0, Math.min(this.detailsMaxScroll, this.detailsScroll + delta));
+    }
+    detailsContains(x: number, y: number) {
+        const v = this.detailsViewport;
+        return x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h;
+    }
+    private detailsPanel(g: Game) {
+        const c = this.c, v = this.detailsViewport;
+        this.backdrop();
+        this.box(306, 61, 560, 457, '#202a20', 16, '#566147');
+        this.text('能力与被动', 330, 96, 23, '#e9ead7', 'left', 800);
+        this.button(706, 79, 134, 36, '关闭 · 继续', 'resume', true);
+        this.line(326, 122, 846, 122, '#465440', 1);
+        // Measure with the same font used to draw, so long descriptions never overflow.
+        const wrap = (value: string, width: number, size: number) => {
+            c.font = `600 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`;
+            const lines: string[] = [];
+            let line = '';
+            for (const char of value) {
+                if (line && c.measureText(line + char).width > width) { lines.push(line); line = ''; }
+                line += char;
+            }
+            if (line) lines.push(line);
+            return lines;
+        };
+        type Entry = { id: number; title: string[]; effect: string[]; recipe: string[]; height: number };
+        const groups = [
+            { label: '能力 · 最多四种', empty: '尚未获得能力', ids: g.weapons },
+            { label: '被动 · 数量不限', empty: '尚未获得被动', ids: g.passives },
+        ].map(group => ({ ...group, rows: group.ids.map(id => {
+            const item = ITEMS[id];
+            const title = wrap(`${g.evolved[id] ? item.evo : item.name} · ${item.maxLevel ? `${g.levels[id]}/${item.maxLevel} 级` : '不可升级'}`, 416, 16);
+            const effect = wrap(g.description(id) + (item.upgrades && !g.evolved[id] && g.levels[id] < item.maxLevel ? ` · 下一级：${item.upgrades[g.levels[id]]}` : ''), 474, 13);
+            const recipe = item.prerequisite === undefined ? [] : wrap(g.evolved[id]
+                ? `已进化 · ${ITEMS[item.prerequisite].name} + 满级能力 + 宝箱`
+                : `进化：${item.name}八级 + ${ITEMS[item.prerequisite].name}（${g.owns(item.prerequisite) ? '已拥有' : '未拥有'}）+ 宝箱 → ${item.evo}`, 474, 12);
+            return { id, title, effect, recipe, height: 24 + Math.max(36, title.length * 22) + 8 + effect.length * 20 + (recipe.length ? 8 + recipe.length * 18 : 0) } satisfies Entry;
+        }) }));
+        const contentHeight = groups.reduce((height, group) => height + 38 + (group.rows.length ? group.rows.reduce((sum, row) => sum + row.height + 10, 0) : 42), 0);
+        this.detailsMaxScroll = Math.max(0, contentHeight - v.h);
+        this.scrollDetails(0);
+        c.save(); c.beginPath(); c.rect(v.x, v.y, v.w, v.h); c.clip();
+        let y = v.y - this.detailsScroll;
+        for (const group of groups) {
+            this.text(group.label, v.x + 4, y + 18, 14, '#c1de7a');
+            y += 38;
+            if (!group.rows.length) { this.text(group.empty, v.x + 14, y + 14, 13, '#aebc9c'); y += 42; }
+            for (const row of group.rows) {
+                if (y + row.height >= v.y && y <= v.y + v.h) {
+                    this.box(v.x, y, 502, row.height, '#2c3829', 9);
+                    this.icon(row.id, v.x + 14, y + 12, 36, g.evolved[row.id]);
+                    row.title.forEach((line, index) => this.text(line, v.x + 62, y + 23 + index * 22, 16, '#f1efdc'));
+                    let lineY = y + 12 + Math.max(36, row.title.length * 22) + 18;
+                    for (const line of row.effect) { this.text(line, v.x + 14, lineY, 13, '#d3dbc4'); lineY += 20; }
+                    if (row.recipe.length) lineY += 8;
+                    for (const line of row.recipe) { this.text(line, v.x + 14, lineY, 12, '#aebc9c'); lineY += 18; }
+                }
+                y += row.height + 10;
+            }
+        }
+        c.restore();
+        if (this.detailsMaxScroll > 0) {
+            const thumb = Math.max(30, v.h * v.h / contentHeight);
+            this.box(v.x + v.w - 7, v.y, 4, v.h, '#35432f', 2);
+            this.box(v.x + v.w - 7, v.y + this.detailsScroll / this.detailsMaxScroll * (v.h - thumb), 4, thumb, '#9bad86', 2);
+        }
     }
     time(t: number) { return `${Math.floor(t / 60).toString().padStart(2, '0')}:${Math.floor(t % 60).toString().padStart(2, '0')}`; }
     hud(g: Game) {
@@ -677,14 +821,14 @@ export class Renderer {
         for (let slot = 0; slot < 4; slot++) {
             const x = barX + 40 + slot * 49, id = g.weapons[slot];
             if (id === undefined) { this.box(x, barY + 4, 29, 29, '#d6d7c6', 6); this.text('＋', x + 14, barY + 19, 14, '#a6ad98', 'center'); }
-            else { this.icon(id, x, barY + 4, 29); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, barY + 19, 11, '#505943', 'center'); }
+            else { this.icon(id, x, barY + 4, 29, g.evolved[id]); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, barY + 19, 11, '#505943', 'center'); }
         }
         this.c.restore();
         g.choices.forEach((id, i) => {
             const x = start + i * (width + gap), item = ITEMS[id];
             this.c.save(); this.c.globalAlpha = this.entrance(i * .055);
             this.box(x, 180, width, 212, this.hover === 'pick:' + id ? '#414d36' : '#2b3528', 12, '#667451');
-            this.icon(id, x + 15, 200, 35);
+            this.icon(id, x + 15, 200, 35, g.evolved[id]);
             this.text(item.maxLevel === 0 ? '一次性 · 不可升级' : g.levels[id] ? `lv.${g.levels[id]} → lv.${g.levels[id] + 1}` : '新！', x + width - 12, 218, 12, item.color, 'right');
             this.text(item.name, x + 18, 268, 20, '#f1efdc');
             const lines = (item.upgrades?.[g.levels[id]] ?? item.desc).match(/.{1,12}/gu) ?? [];
