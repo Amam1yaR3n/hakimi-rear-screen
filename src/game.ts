@@ -1,6 +1,7 @@
 import { CFG, ANCHOR, W, H, SAFE, ITEMS, ID } from './config';
 export type Mode = 'ready' | 'playing' | 'paused' | 'details' | 'choice' | 'evolution' | 'chest' | 'over';
 export type Enemy = {
+    slowUntil?: number;
     uid: number;
     x: number;
     y: number;
@@ -21,6 +22,11 @@ export type Drop = {
 };
 export type Wave = { x: number; y: number; radius: number; maxRadius: number; angle: number; halfAngle: number; damage: number; hit: Set<number> };
 export type DamageNumber = { x: number; y: number; value: number; life: number };
+export type Ear = { x: number; y: number; vx: number; vy: number; gravity: number; life: number; angle: number; radius: number; damage: number; hit: Set<number> };
+export type Bean = { x: number; y: number; vx: number; vy: number; life: number; radius: number; damage: number; pierce: number; hit: Set<number> };
+export type HoneyPool = { x: number; y: number; fall: number; life: number; radius: number; initialRadius: number; damage: number; evolved: boolean; speed: number; hits: Map<number, number> };
+export type MamboWave = { life: number; width: number; damage: number; evolved: boolean; hits: Map<number, number> };
+export const CHICKEN_IMPACT = .18, CHICKEN_DURATION = .45;
 export const SLASH_DURATION = .32;
 export class SpatialGrid {
     cells = new Map<string, Enemy[]>();
@@ -60,6 +66,12 @@ export class Game {
     drops: Drop[] = [];
     waves: Wave[] = [];
     numbers: DamageNumber[] = [];
+    ears: Ear[] = [];
+    beans: Bean[] = [];
+    honeyPools: HoneyPool[] = [];
+    mamboWaves: MamboWave[] = [];
+    honeyAngle = 0;
+    chicken: { age: number; evolved: boolean; settled: boolean } | null = null;
     bombFlash = 0;
     grid = new SpatialGrid();
     choices: number[] = [];
@@ -100,6 +112,102 @@ export class Game {
     get auraRange() { return (55 + this.legacyLevel(ID.aura) * 9) * this.attackRange; }
     get duration() { return 1 + this.levels[ID.duration] * .1; }
     get projectileSpeed() { return 1 + this.levels[ID.projectileSpeed] * .1; }
+    get luck() { return this.levels[ID.luck]; }
+    get chickenCooldown() { return (this.evolved[ID.chicken] ? 30 : 60 - 3 * (this.levels[ID.chicken] - 1)) * this.cooldown; }
+    get chickenRetention() { return .3 + .05 * (this.levels[ID.chicken] - 1); }
+    get earStats() {
+        const l = this.levels[ID.ear], evolved = this.evolved[ID.ear];
+        return { damage: (evolved ? 110 : 30 + 8 * (l - 1)) * this.attack,
+            count: (evolved ? 8 : 1 + Math.floor((l - 1) / 2)) + this.amount,
+            interval: (evolved ? 2.3 : 3 - .1 * (l - 1)) * this.cooldown,
+            life: (evolved ? 3 : 2 + .1 * (l - 1)) * this.duration,
+            radius: (evolved ? 20 : 14) * this.attackRange };
+    }
+    get beanStats() {
+        const l = this.levels[ID.bean], e = this.evolved[ID.bean];
+        return { damage: (e ? 30 : 10 + (l >= 4 ? 10 : 0) + (l >= 8 ? 10 : 0)) * this.attack,
+            count: (e ? 4 : 1 + Number(l >= 2) + Number(l >= 5) + Number(l >= 7)) + this.amount,
+            interval: (e ? .4 : 1.2 - (l >= 3 ? .1 : 0) - (l >= 8 ? .1 : 0)) * this.cooldown,
+            speed: (e ? 840 : 420) * this.projectileSpeed, radius: 5 * this.attackRange, pierce: e ? 3 : l >= 6 ? 2 : 1, life: 3 };
+    }
+    get honeyStats() {
+        const l = this.levels[ID.honey], e = this.evolved[ID.honey];
+        return { damage: (e ? 40 : 10 + 10 * Number(l >= 3) + 10 * Number(l >= 5) + 5 * Number(l >= 7) + 5 * Number(l >= 8)) * this.attack,
+            count: (e ? 4 : 1 + Number(l >= 2) + Number(l >= 4) + Number(l >= 6)) + this.amount,
+            interval: (e ? 4 : 4.5) * this.cooldown,
+            life: (e ? 4 : 2 + .5 * Number(l >= 3) + .5 * Number(l >= 5)) * this.duration,
+            radius: (e ? 56 : 28 * (1 + .2 * (Number(l >= 2) + Number(l >= 4) + Number(l >= 6) + Number(l >= 8)))) * this.attackRange,
+            speed: e ? 1 + this.levels[ID.projectileSpeed] * .1 + this.levels[ID.move] * .1 : 0 };
+    }
+    get mamboStats() {
+        const l = this.levels[ID.mambo], e = this.evolved[ID.mambo], stages = Number(l >= 3) + Number(l >= 5) + Number(l >= 7);
+        return { damage: (e ? 40 : 10 + 10 * (Number(l >= 4) + Number(l >= 6) + Number(l >= 8))) * this.attack,
+            width: (e ? 160 : 40 + 40 * Number(l >= 2) + 10 * (Number(l >= 4) + Number(l >= 6) + Number(l >= 8))) * this.attackRange,
+            life: (e ? 3 : .5 + .5 * stages) * this.duration, interval: (e ? 3 : 2 + .75 * stages) * this.cooldown };
+    }
+    nearestEnemy() { return this.enemies.filter(e => e.alive).sort((a, b) => Math.hypot(a.x - this.player.x, a.y - this.player.y) - Math.hypot(b.x - this.player.x, b.y - this.player.y))[0]; }
+    fireBean() {
+        const target = this.nearestEnemy(); if (!target) return;
+        const s = this.beanStats, angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+        this.beans.push({ ...s, x: this.player.x, y: this.player.y, vx: Math.cos(angle) * s.speed, vy: Math.sin(angle) * s.speed, hit: new Set() });
+        if (this.beans.length > 120) this.beans.shift();
+    }
+    summonHoney() {
+        const s = this.honeyStats, evolved = this.evolved[ID.honey];
+        for (let i = 0; i < s.count; i++) this.schedule(i * .3, () => {
+            const target = s.count < 4 && i === 0 ? this.nearestEnemy() : undefined;
+            const angle = this.honeyAngle; this.honeyAngle = (angle + Math.PI * 2 / Math.max(4, s.count)) % (Math.PI * 2);
+            this.honeyPools.push({ x: target?.x ?? this.player.x + Math.cos(angle) * 140, y: target?.y ?? this.player.y + Math.sin(angle) * 140,
+                fall: .35, life: s.life, radius: s.radius, initialRadius: s.radius, damage: s.damage, evolved, speed: s.speed, hits: new Map() });
+            const cap = this.evolved[ID.honey] ? 30 : 20;
+            if (this.honeyPools.length > cap) this.honeyPools.shift();
+        });
+    }
+    summonMambo() { const s = this.mamboStats; this.mamboWaves.push({ ...s, evolved: this.evolved[ID.mambo], hits: new Map() }); }
+    updateNewAbilities(dt: number) {
+        for (const bean of this.beans) {
+            const step = Math.min(dt, bean.life), x = bean.x, y = bean.y, dx = bean.vx * step, dy = bean.vy * step, length2 = dx * dx + dy * dy;
+            bean.x += dx; bean.y += dy; bean.life -= dt;
+            // Resolve swept hits in travel order so the nearest collision consumes penetration first.
+            const hits = this.enemies.filter(e => e.alive && !bean.hit.has(e.uid)).map(e => {
+                const t = length2 ? Math.max(0, Math.min(1, ((e.x - x) * dx + (e.y - y) * dy) / length2)) : 0;
+                return { e, t, distance: Math.hypot(e.x - x - dx * t, e.y - y - dy * t) };
+            }).filter(h => h.distance <= h.e.r + bean.radius).sort((a, b) => a.t - b.t);
+            for (const { e } of hits) {
+                bean.hit.add(e.uid); this.damage(e, bean.damage);
+                if (--bean.pierce === 0) { bean.life = 0; break; }
+            }
+        }
+        this.beans = this.beans.filter(b => b.life > 0);
+        for (const pool of this.honeyPools) {
+            let step = dt;
+            if (pool.fall > 0) { const falling = Math.min(step, pool.fall); pool.fall = Math.max(0, pool.fall - falling); step -= falling; if (pool.fall > 1e-9) continue; pool.fall = 0; }
+            step = Math.min(step, pool.life);
+            if (pool.evolved) {
+                const dx = this.player.x - pool.x, dy = this.player.y - pool.y, distance = Math.hypot(dx, dy);
+                if (distance > 0) {
+                    const travel = Math.min(distance, 35 * pool.speed * step);
+                    pool.x += dx / distance * travel; pool.y += dy / distance * travel;
+                    pool.radius = Math.min(pool.initialRadius * 2, pool.radius + pool.initialRadius * .25 * pool.speed * (travel / (35 * pool.speed)));
+                }
+            }
+            for (const [uid, until] of pool.hits) if (until <= this.time + 1e-9) pool.hits.delete(uid);
+            for (const e of this.grid.query(pool.x, pool.y, pool.radius)) if (!pool.hits.has(e.uid)) {
+                this.damage(e, pool.damage); pool.hits.set(e.uid, this.time + .5);
+            }
+            pool.life -= step;
+        }
+        this.honeyPools = this.honeyPools.filter(p => p.life > 1e-9);
+        for (const wave of this.mamboWaves) {
+            for (const [uid, until] of wave.hits) if (until <= this.time + 1e-9) wave.hits.delete(uid);
+            for (const e of this.enemies) if (e.alive && Math.abs(e.x - this.player.x) <= wave.width / 2 + e.r && e.y + e.r >= this.player.y - ANCHOR.y && e.y - e.r <= this.player.y + H - ANCHOR.y && !wave.hits.has(e.uid)) {
+                this.damage(e, wave.damage); wave.hits.set(e.uid, this.time + 1);
+                if (wave.evolved) e.slowUntil = this.time + 2;
+            }
+            wave.life -= dt;
+        }
+        this.mamboWaves = this.mamboWaves.filter(w => w.life > 1e-9);
+    }
     legacyLevel(id: number) { return 1 + 4 * (this.levels[id] - 1) / 7; }
     owns(id: number) { return this.weapons.includes(id) || this.passives.includes(id); }
     start() { const sound = this.onSound, effect = this.onEffect; Object.assign(this, new Game()); this.onSound = sound; this.onEffect = effect; this.onEffect('reset', 0, 0); this.mode = 'playing'; }
@@ -121,6 +229,7 @@ export class Game {
     applyUpgrade(id: number) {
         if (!this.owns(id)) (ITEMS[id].kind === 'weapon' ? this.weapons : this.passives).push(id);
         if (ITEMS[id].maxLevel) this.levels[id]++;
+        if (id === ID.chicken) this.triggerChicken();
         if (id === ID.health) this.player.hp += 20;
     }
     checkLevel() { if (this.mode !== 'playing')
@@ -131,12 +240,13 @@ export class Game {
     } }
     chest() {
         if (this.mode !== 'playing') return;
-        const roll = this.rng(), count = roll < .7 ? 1 : roll < .95 ? 3 : 5;
+        const roll = this.rng(), count = roll < (70 - 4 * this.luck) / 100 ? 1 : roll < (95 - this.luck) / 100 ? 3 : 5;
         this.chestRewards = []; this.chestAge = 0; this.choices = [];
         for (let slot = 0; slot < count; slot++) {
             const evolution = this.weapons.find(i => this.levels[i] === ITEMS[i].maxLevel && !this.evolved[i] && this.owns(ITEMS[i].prerequisite!));
             if (evolution !== undefined) {
                 this.evolved[evolution] = true; this.lastEvolution = evolution;
+                if (evolution === ID.chicken) this.triggerChicken();
                 this.chestRewards.push({ id: evolution, kind: 'evolution', level: this.levels[evolution] });
                 continue;
             }
@@ -159,15 +269,23 @@ export class Game {
     else {
         y += this.rng() * (H + 90);
         x = side === 2 ? x : W - ANCHOR.x + 45;
-    } const hp = CFG.enemyHP(this.time) * (elite ? 12 : 1); const e = this.pool.pop() ?? {} as Enemy; Object.assign(e, { uid: this.nextEnemyId++, x: this.player.x + x, y: this.player.y + y, hp, max: hp, r: elite ? 27 : 17, elite, flash: 0, alive: true }); this.enemies.push(e); }
-    damage(e: Enemy, n: number) { if (!e.alive)
+    } const hp = CFG.enemyHP(this.time) * (elite ? 12 : 1); const e = this.pool.pop() ?? {} as Enemy; Object.assign(e, { uid: this.nextEnemyId++, x: this.player.x + x, y: this.player.y + y, hp, max: hp, r: elite ? 27 : 17, elite, flash: 0, alive: true, slowUntil: 0 }); this.enemies.push(e); }
+    damage(e: Enemy, n: number, rewards = true, riceMultiplier = 1) { if (!e.alive)
         return; e.hp -= n; this.onEffect(e.hp <= 0 ? 'kill' : 'hit', e.x, e.y); e.flash = .1; this.numbers.push({ x: e.x, y: e.y - e.r, value: Math.round(n), life: .7 });
         if (this.numbers.length > 180) this.numbers.shift(); if (e.hp <= 0) {
         e.alive = false;
         this.kills++;
-        this.drops.push({ x: e.x, y: e.y, chest: e.elite, value: e.elite ? 0 : 2 });
-        const roll = this.rng();
-        const kind = roll < CFG.itemDrops.heal ? 'heal' : roll < CFG.itemDrops.heal + CFG.itemDrops.magnet ? 'magnet' : roll < CFG.itemDrops.heal + CFG.itemDrops.magnet + CFG.itemDrops.bomb ? 'bomb' : undefined;
+        if (e.elite) this.drops.push({ x: e.x, y: e.y, chest: true, value: 0 });
+        if (!rewards) return;
+        if (!e.elite) {
+            const doubled = this.luck > 0 && this.rng() < this.luck / 10;
+            this.drops.push({ x: e.x, y: e.y, chest: false, value: 2 * riceMultiplier * (doubled ? 2 : 1) });
+        }
+        const roll = this.rng(), dropMultiplier = 1 + .2 * this.luck;
+        // Round cumulative base odds before scaling to keep exact tier boundaries stable.
+        const magnetThreshold = Number((CFG.itemDrops.heal + CFG.itemDrops.magnet).toFixed(8));
+        const bombThreshold = Number((magnetThreshold + CFG.itemDrops.bomb).toFixed(8));
+        const kind = roll < CFG.itemDrops.heal * dropMultiplier ? 'heal' : roll < magnetThreshold * dropMultiplier ? 'magnet' : roll < bombThreshold * dropMultiplier ? 'bomb' : undefined;
         if (kind) this.drops.push({ x: e.x + 12, y: e.y, chest: false, value: 0, kind });
     } }
     collect(d: Drop) {
@@ -214,12 +332,75 @@ export class Game {
         const count = (this.evolved[ID.truck] ? 3 : 1);
         for (let i = 0; i < count; i++) this.schedule(i * .4, () => this.trucks.push({ x, y, dx, dy, life: 4 * this.duration, damage: (60 + 15 * (this.levels[ID.truck] - 1)) * this.attack, hit: new Set() }));
     }
+    summonEars() {
+        const stats = this.earStats, evolved = this.evolved[ID.ear];
+        for (let i = 0; i < stats.count; i++) {
+            const angle = evolved ? -Math.PI / 2 + i * Math.PI * 2 / stats.count
+                : -Math.PI / 2 + (stats.count === 1 ? 0 : (i / (stats.count - 1) - .5) * Math.PI / 2);
+            this.ears.push({ x: this.player.x, y: this.player.y, vx: Math.cos(angle) * (evolved ? 230 : 260),
+                vy: Math.sin(angle) * (evolved ? 230 : 260), gravity: evolved ? 0 : 300,
+                life: stats.life, angle, radius: stats.radius, damage: stats.damage, hit: new Set() });
+        }
+    }
+    triggerChicken() {
+        this.chicken = { age: 0, evolved: this.evolved[ID.chicken], settled: false };
+        this.cd[ID.chicken] = this.chickenCooldown;
+    }
+    updateChicken(dt: number) {
+        const chicken = this.chicken;
+        if (!chicken) return;
+        chicken.age += dt;
+        if (!chicken.settled && chicken.age >= CHICKEN_IMPACT) {
+            chicken.settled = true;
+            const rewards = chicken.evolved || this.rng() < this.chickenRetention;
+            for (const e of this.enemies) {
+                const x = e.x - this.player.x + ANCHOR.x, y = e.y - this.player.y + ANCHOR.y;
+                if (e.alive && x + e.r >= SAFE && x - e.r <= W && y + e.r >= 0 && y - e.r <= H)
+                    this.damage(e, e.elite ? e.max * .3 : e.hp, rewards, chicken.evolved ? 2 : 1);
+            }
+            this.onSound('evolve');
+        }
+        if (chicken.age >= CHICKEN_DURATION) {
+            if (chicken.evolved) for (const d of this.drops) if (!d.chest && !d.kind) d.attracted = true;
+            this.chicken = null;
+        }
+    }
     attacks(dt: number) {
+        this.updateChicken(dt);
+        if (this.levels[ID.chicken] && this.cd[ID.chicken] <= dt && !this.chicken) {
+            this.chicken = { age: 0, evolved: this.evolved[ID.chicken], settled: false };
+            this.cd[ID.chicken] = this.chickenCooldown + dt;
+        }
+        if (this.levels[ID.ear] && this.cd[ID.ear] <= dt) {
+            this.summonEars(); this.cd[ID.ear] = this.earStats.interval + dt;
+        }
+        for (const ear of this.ears) {
+            const step = Math.min(dt, ear.life), oldX = ear.x, oldY = ear.y;
+            ear.x += ear.vx * step; ear.y += ear.vy * step + ear.gravity * step * step / 2;
+            ear.vy += ear.gravity * step; ear.life -= dt; ear.angle += step * 9;
+            const dx = ear.x - oldX, dy = ear.y - oldY, length2 = dx * dx + dy * dy;
+            // Swept collision includes enemy radius and prevents fast ears skipping targets.
+            for (const e of this.enemies) {
+                if (!e.alive || ear.hit.has(e.uid)) continue;
+                const t = length2 ? Math.max(0, Math.min(1, ((e.x - oldX) * dx + (e.y - oldY) * dy) / length2)) : 0;
+                if (Math.hypot(e.x - oldX - dx * t, e.y - oldY - dy * t) <= ear.radius + e.r) {
+                    ear.hit.add(e.uid); this.damage(e, ear.damage);
+                }
+            }
+        }
+        this.ears = this.ears.filter(ear => ear.life > 0);
         for (const p of this.paws) p.age += dt;
         this.paws = this.paws.filter(p => p.age < .55);
         const due = this.pending; this.pending = [];
         for (const p of due) { p.delay -= dt; if (p.delay <= 1e-9) p.run(); else this.pending.push(p); }
         for (const id of this.weapons) this.cd[id] -= dt;
+        this.updateNewAbilities(dt);
+        if (this.levels[ID.bean] && this.cd[ID.bean] <= 1e-9) {
+            if (this.nearestEnemy()) for (let i = 0; i < this.beanStats.count; i++) this.schedule(i * .1, () => this.fireBean());
+            this.cd[ID.bean] = this.beanStats.interval;
+        }
+        if (this.levels[ID.honey] && this.cd[ID.honey] <= 1e-9) { this.summonHoney(); this.cd[ID.honey] = this.honeyStats.interval; }
+        if (this.levels[ID.mambo] && this.cd[ID.mambo] <= 1e-9) { this.summonMambo(); this.cd[ID.mambo] = this.mamboStats.interval; }
         if (this.levels[ID.hiss] && this.cd[ID.hiss] <= 0) {
             const l = this.legacyLevel(ID.hiss);
             const targets = this.grid.query(this.player.x, this.player.y, this.hissRange).sort((a, b) => Math.hypot(a.x - this.player.x, a.y - this.player.y) - Math.hypot(b.x - this.player.x, b.y - this.player.y));
@@ -297,10 +478,16 @@ export class Game {
         const l = this.levels[id], fmt = (n: number) => Number(n.toFixed(2));
         if (id === ID.revive) return this.reviveUsed ? '已消耗 · 本局不再获得' : '半血复活一次 · 三秒无敌';
         const passive: Record<number, string> = {
-            [ID.range]: `全部能力攻击范围 +${l * 10}%`, [ID.cooldown]: `攻击冷却 −${l * 8}%`, [ID.recovery]: `每秒恢复 ${fmt(l * .35)} 生命`, [ID.health]: `最大生命 +${l * 20}`,
-            [ID.attack]: `全部能力伤害 +${l * 10}%`, [ID.amount]: `攻击数量 +${l}（光环、大运除外）`, [ID.move]: `移动速度 +${l * 10}%`, [ID.xp]: `经验获取 +${l * 10}%`, [ID.pickup]: `吸取范围 +${l * 20}%`, [ID.duration]: `糖块存在 / 卡车寿命 +${l * 10}%`, [ID.projectileSpeed]: `糖块转速 / 卡车车速 +${l * 10}%`,
+            [ID.range]: `攻击范围（叮咚鸡除外） +${l * 10}%`, [ID.cooldown]: `攻击冷却 −${l * 8}%`, [ID.recovery]: `每秒恢复 ${fmt(l * .35)} 生命`, [ID.health]: `最大生命 +${l * 20}`,
+            [ID.attack]: `伤害（叮咚鸡除外） +${l * 10}%`, [ID.amount]: `攻击数量 +${l}（光环、大运、叮咚鸡、曼波除外）`, [ID.move]: `移动速度 / 蜂蜜海移动与成长 +${l * 10}%`, [ID.xp]: `经验获取 +${l * 10}%`, [ID.pickup]: `吸取范围 +${l * 20}%`, [ID.duration]: `糖块 / 卡车 / 猫耳 / 蜂蜜 / 曼波持续 +${l * 10}%`, [ID.projectileSpeed]: `糖块转速 / 卡车车速 / 绿豆速度 / 蜂蜜海移动与成长 +${l * 10}%`,
         };
+        if (id === ID.luck) return `道具掉率 +${l * 20}% · 三项/五项宝箱 ${25 + l * 3}%/${5 + l}% · 双倍小米 ${l * 10}%`;
         if (ITEMS[id].kind === 'passive') return passive[id];
+        if (id === ID.bean) { const s = this.beanStats; return `${s.count}颗/批 · 伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 每颗命中${s.pierce}敌 · 速度${fmt(s.speed)} · 半径${fmt(s.radius)} · 寿命3秒 · 持续时间无效`; }
+        if (id === ID.honey) { const s = this.honeyStats; return `${s.count}罐/批 · 每0.5秒伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 持续${fmt(s.life)}秒 · 半径${fmt(s.radius)} · ${this.evolved[id] ? '向角色汇聚并扩大至两倍；子弹速度、移动速度增强成长' : '固定地面；子弹速度、移动速度无效'} · 无减速；吸取范围仅为进化条件`; }
+        if (id === ID.mambo) { const s = this.mamboStats; return `每1秒伤害${fmt(s.damage)} · 宽度${fmt(s.width)} · 持续${fmt(s.life)}秒 · 间隔${fmt(s.interval)}秒 · ${this.evolved[id] ? '减速50%持续2秒，刷新不叠加；' : ''}数量、子弹速度无效`; }
+        if (id === ID.ear) { const s = this.earStats; return `${s.count} 枚${this.evolved[id] ? '径向' : '抛射'}猫耳 · 伤害 ${fmt(s.damage)} · 间隔 ${fmt(s.interval)} 秒 · 寿命 ${fmt(s.life)} 秒 · 半径 ${fmt(s.radius)} · 每枚每敌命中一次`; }
+        if (id === ID.chicken) return `间隔 ${fmt(this.chickenCooldown)} 秒 · 普通秒杀 / 精英最大生命30% · ${this.evolved[id] ? '稳定掉落、小米×2，结束吸取全部小米' : `整次保留掉落 ${fmt(this.chickenRetention * 100)}%`} · 保留已有物品和精英宝箱 · 仅冷却加成`;
         if (id === ID.paw) return `${1 + Math.floor((l - 1) / 2) + this.amount} 次落爪 · 伤害 ${fmt((20 + 5 * (l - 1)) * this.attack)} · 间隔 ${fmt((4 - .2 * (l - 1)) * this.cooldown)} 秒${this.evolved[id] ? ' · 二连拍' : ''}`;
         if (id === ID.gum) return `${1 + Math.floor((l - 1) / 2) + this.amount} 块糖 · 伤害 ${fmt((8 + 2 * (l - 1)) * this.attack)} · ${this.evolved[id] ? '永久环绕' : `持续 ${fmt((3 + .25 * (l - 1)) * this.duration)} 秒`}`;
         if (id === ID.truck) return `${(this.evolved[id] ? 3 : 1)} 辆车 · 伤害 ${fmt((60 + 15 * (l - 1)) * this.attack)} · 间隔 ${fmt((10 - .5 * (l - 1)) * this.cooldown)} 秒`;
@@ -315,12 +502,6 @@ export class Game {
         for (const n of this.numbers) { n.life -= dt; n.y -= dt * 32; }
         this.numbers = this.numbers.filter(n => n.life > 0);
         this.time += dt;
-        if (this.time >= CFG.duration) {
-            this.time = CFG.duration;
-            this.won = true;
-            this.mode = 'over';
-            return;
-        }
         this.player.x += input.x * CFG.speed * (1 + this.levels[ID.move] * .1) * dt;
         this.player.y += input.y * CFG.speed * (1 + this.levels[ID.move] * .1) * dt;
         this.player.hp = Math.min(this.maxHP, this.player.hp + this.levels[ID.recovery] * .35 * dt);
@@ -330,8 +511,6 @@ export class Game {
         while (this.eliteMinute < minute) {
             this.eliteMinute++;
             this.spawnEnemy(true);
-            this.onEffect('elite', this.player.x, this.player.y);
-            this.onSound('chest');
         }
         this.spawn -= dt;
         while (this.spawn <= 0) {
@@ -342,7 +521,7 @@ export class Game {
             if (!e.alive)
                 continue;
             const dx = this.player.x - e.x, dy = this.player.y - e.y, d = Math.hypot(dx, dy) || 1;
-            const speed = CFG.enemySpeed(this.time, e.elite);
+            const speed = CFG.enemySpeed(this.time, e.elite) * ((e.slowUntil ?? 0) > this.time ? .5 : 1);
             e.x += dx / d * speed * dt;
             e.y += dy / d * speed * dt;
             e.flash = Math.max(0, e.flash - dt);

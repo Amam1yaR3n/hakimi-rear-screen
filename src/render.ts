@@ -1,4 +1,4 @@
-import { Game, SLASH_DURATION } from './game';
+import { Game, SLASH_DURATION, CHICKEN_IMPACT, CHICKEN_DURATION } from './game';
 import { W, H, SAFE, ANCHOR, ITEMS, ID } from './config';
 import { characterSprite } from './sprites';
 export type Button = {
@@ -28,7 +28,7 @@ export class Renderer {
     private particles: { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }[] = [];
     effect(kind: string, x: number, y: number) {
         if (kind === 'reset') { this.particles = []; this.hp = 1; this.xp = 0; this.lastX = this.lastY = this.motion = this.lean = this.shake = this.noticeLife = 0; this.lastMode = ''; this.chestLife = 0; return; }
-        if (kind === 'elite') { this.notice = '精英出现！'; this.noticeLife = 1.8; return; }
+        if (kind === 'elite') return;
         if (kind === 'chest') this.chestLife = .6;
         if (kind === 'bomb') this.shake = .22;
         const count = kind === 'kill' ? 7 : kind === 'hit' ? 3 : kind === 'xp' ? 3 : 12;
@@ -143,6 +143,12 @@ export class Renderer {
             case ID.hiss: for (const r of [7, 13, 19]) arc(r, -.8, .8); this.ellipse(9, 21, 3, 4, ink); break;
             case ID.aura: ring(20, 21, 13); ring(20, 21, 8); this.poly([[20,10],[24,21],[20,29],[16,21]], '#fff7d9', ''); break;
             case ID.claw: for (let i = 0; i < 3; i++) this.poly([[9+i*8,30],[14+i*8,12],[19+i*8,8],[14+i*8,31]], '#fff6dc', ink); break;
+            case ID.bean: this.ellipse(15,23,6,9,'#658d35',ink); this.ellipse(27,15,5,8,'#d2eaa0',ink); this.line(13,19,15,25,'#e3efbc',2); break;
+            case ID.honey: this.honeyJar(20,23,1); break;
+            case ID.mambo: this.text('♫',20,21,29,'#fff1c5','center'); break;
+            case ID.ear: this.catEar(20, 21, 15, -.15); break;
+            case ID.chicken: this.chickenFace(20, 23, .22); break;
+            case ID.luck: for (const [x,y] of [[14,14],[26,14],[14,25],[26,25]]) this.ellipse(x,y,7,7,'#e5f4b7',ink); this.line(20,22,25,35,ink,2); break;
             case ID.cooldown: ring(20,22,12); this.line(20,22,20,14,ink,2.5); this.line(20,22,27,25,ink,2.5); this.line(16,5,24,5,ink,3); break;
             case ID.recovery: this.box(16,8,8,25,'#fff5eb',2); this.box(8,16,24,8,'#fff5eb',2); break;
             case ID.health: this.poly([[20,33],[6,19],[7,11],[14,8],[20,13],[26,8],[33,11],[34,19]], '#fff0dc', ink); break;
@@ -160,6 +166,48 @@ export class Renderer {
         }
         c.restore();
     }
+    catEar(x: number, y: number, radius: number, angle: number) {
+        const c = this.c; c.save(); c.translate(x,y); c.rotate(angle); c.scale(radius / 20, radius / 20);
+        c.lineJoin = 'round'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(-17,15);
+        c.bezierCurveTo(-20,7,-18,-14,-15,-21);
+        c.bezierCurveTo(-13,-27,1,-17,8,-8);
+        c.quadraticCurveTo(13,1,18,10);
+        c.quadraticCurveTo(0,7,-17,15);
+        c.fillStyle = '#a9a58c'; c.fill(); c.strokeStyle = '#30332a'; c.stroke();
+        c.beginPath(); c.moveTo(-13,8);
+        c.quadraticCurveTo(-15,-7,-13,-18);
+        c.quadraticCurveTo(-5,-16,4,-5);
+        c.quadraticCurveTo(-6,-1,-13,8);
+        c.fillStyle = '#e8c1b4'; c.fill();
+        c.restore();
+    }
+    chickenFace(x: number, y: number, scale: number) {
+        const c = this.c; c.save(); c.translate(x,y); c.scale(scale,scale);
+        this.ellipse(0, 12, 56, 73, '#f7f3e7', '#cac7b9');
+        this.ellipse(-17, 2, 7, 10, '#251e1b'); this.ellipse(18, 2, 7, 10, '#251e1b');
+        this.ellipse(-19,-1,2,3,'#fff'); this.ellipse(16,-1,2,3,'#fff');
+        this.ellipse(0, -55, 18, 28, '#cf2718', '#922114');
+        this.ellipse(-3,-67,15,20,'#e6381d');
+        this.ellipse(-6,-72,5,7,'#f26c36');
+        this.ellipse(0, 33, 23, 27, '#efad09', '#b6740b');
+        this.ellipse(-6,25,8,12,'#ffd046');
+        c.restore();
+    }
+    chickenOverlay(g: Game) {
+        if (!g.chicken) return;
+        const c = this.c, age = g.chicken.age;
+        const growth = Math.min(1, age / CHICKEN_IMPACT);
+        const fade = age <= CHICKEN_IMPACT ? 1 : Math.max(0, (CHICKEN_DURATION - age) / (CHICKEN_DURATION - CHICKEN_IMPACT));
+        c.save(); c.beginPath(); c.rect(SAFE,0,W-SAFE,H); c.clip();
+        c.globalAlpha = fade;
+        const scale = .15 + 4.7 * growth * growth;
+        if (g.chicken.evolved) {
+            this.ellipse((SAFE+W)/2,H/2,scale*66,scale*80,'#ffe99b44');
+            for (let i=0;i<12;i++) { const a=i*Math.PI/6; this.line((SAFE+W)/2+Math.cos(a)*60,H/2+Math.sin(a)*60,(SAFE+W)/2+Math.cos(a)*420,H/2+Math.sin(a)*420,'#fff0a566',5); }
+        }
+        this.chickenFace((SAFE+W)/2,H/2,scale); c.restore();
+    }
     whitePaw(x: number, y: number, scale: number) {
         const c = this.c; c.save(); c.translate(x, y); c.scale(scale, scale);
         this.box(-15, -61, 30, 57, '#797b66', 10, '#394033');
@@ -171,6 +219,11 @@ export class Renderer {
     newAttacks(g: Game, ox: number, oy: number) {
         const c = this.c;
         c.save(); c.beginPath(); c.rect(0, 0, W, H); c.clip();
+        for (const ear of g.ears) {
+            const x = ear.x + ox, y = ear.y + oy;
+            if (x + ear.radius < 0 || x - ear.radius > W || y + ear.radius < 0 || y - ear.radius > H) continue;
+            this.catEar(x,y,ear.radius,ear.angle);
+        }
         for (const t of g.trucks) {
             c.save(); c.translate(t.x + ox, t.y + oy); c.rotate(Math.atan2(t.dy, t.dx)); c.scale(g.attackRange, g.attackRange);
             this.box(-76, -30, 152, 65, '#27362d55', 8);
@@ -322,6 +375,7 @@ export class Renderer {
                 c.restore();
             }
         }
+        this.honeyGround(g, ox, oy);
         if (g.levels[1]) {
             const radius = g.auraRange;
             this.ellipse(ANCHOR.x, ANCHOR.y, radius, radius, g.evolved[1] ? '#a0ac623a' : '#a99bd72b');
@@ -351,6 +405,7 @@ export class Renderer {
             c.restore();
         }
         this.newAttacks(g, ox, oy);
+        this.foodProjectiles(g, ox, oy);
         this.character(0, ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
         if (g.slash) {
             this.clawSwipe(g);
@@ -369,6 +424,7 @@ export class Renderer {
         c.restore();
         if (this.noticeLife > 0) { c.save(); c.globalAlpha = Math.min(1, this.noticeLife * 3); this.box(493, 119, 190, 32, '#303b2de8', 10); this.text(this.notice, 588, 135, 16, '#ffe3a1', 'center'); c.restore(); }
         if (g.bombFlash > 0) { c.fillStyle = `rgba(255,232,163,${g.bombFlash * .55})`; c.fillRect(0, 0, W, H); }
+        this.chickenOverlay(g);
         this.chestArrows(g, ox, oy);
         this.hud(g);
         if (g.mode !== 'playing' && g.mode !== 'ready') this.buttons = [];
@@ -377,7 +433,7 @@ export class Renderer {
         if (g.mode === 'choice')
             this.choices(g);
         else if (g.mode === 'paused')
-            this.panel('稍息，基米。', '保持舒服的握姿，继续时会重新校准', () => { this.button(426, 290, 320, 46, '继续生存', 'resume', true); this.button(426, 350, 154, 40, '重新校准', 'calibrate'); this.button(592, 350, 154, 40, this.muted ? '开启声音' : '关闭声音', 'mute'); });
+            this.panel('稍息，基米。', '', () => { this.button(426, 290, 320, 46, '继续生存', 'resume', true); this.button(426, 350, 320, 40, '重新校准', 'calibrate'); });
         else if (g.mode === 'evolution')
             this.panel('进 化 完 成', ITEMS[g.lastEvolution].name + '  →  ' + ITEMS[g.lastEvolution].evo, () => { this.icon(g.lastEvolution, 560, 255, 54); this.text('现在，轮到它们害怕了。', 588, 333, 16, '#c3c9ab', 'center'); this.button(446, 379, 284, 45, '继续生存', 'resume', true); });
         else if (g.mode === 'over')
@@ -393,6 +449,39 @@ export class Renderer {
         if (this.chestLife > 0) { c.save(); c.globalAlpha = Math.min(1, this.chestLife * 5); this.text('宝箱开启！', 588, 145 - (1 - this.chestLife / .6) * 10, 19, '#ffe5a0', 'center'); c.restore(); }
         // Physical camera cutouts stay blank and fixed above every canvas effect.
         this.lenses();
+    }
+    honeyJar(x: number, y: number, scale: number) {
+        const c = this.c; c.save(); c.translate(x, y); c.scale(scale, scale);
+        this.box(-10,-11,20,24,'#e9aa39',5,'#775020'); this.box(-12,-16,24,7,'#f5db9b',2,'#775020');
+        this.box(-7,-4,14,11,'#fff0b7',3); this.text('蜜',0,2,9,'#81591e','center'); c.restore();
+    }
+    honeyGround(g: Game, ox: number, oy: number) {
+        const c = this.c;
+        for (const pool of g.honeyPools) {
+            const x = pool.x + ox, y = pool.y + oy;
+            if (pool.fall > 0) { this.ellipse(x,y,pool.radius,pool.radius,'#e6b44c18','#c9a45755'); continue; }
+            c.save(); c.globalAlpha = Math.min(1,pool.life * 3);
+            this.ellipse(x,y,pool.radius,pool.radius,pool.evolved ? '#e8b33866' : '#e4a33955','#d29b3a99');
+            this.ellipse(x-pool.radius*.25,y-pool.radius*.25,pool.radius*.3,pool.radius*.12,'#ffedb777'); c.restore();
+        }
+        for (const wave of g.mamboWaves) {
+            c.save(); c.beginPath(); c.rect(ANCHOR.x-wave.width/2,0,wave.width,H); c.clip();
+            c.fillStyle=wave.evolved?'#c790ee25':'#8ed6d51c';c.fillRect(ANCHOR.x-wave.width/2,0,wave.width,H);
+            this.line(ANCHOR.x-wave.width/2,0,ANCHOR.x-wave.width/2,H,'#e3b7f777',2);
+            this.line(ANCHOR.x+wave.width/2,0,ANCHOR.x+wave.width/2,H,'#b2e9d777',2);
+            for(let i=0;i<24;i++) {
+                const y=(i*47+g.time*80)%H, x=ANCHOR.x+Math.sin(i*2.4+g.time*3)*wave.width*.38;
+                this.text(i%2?'♪':'♫',x,y, wave.evolved?23:17,['#bc85df','#5fbdac','#e7b84b'][i%3],'center');
+            }
+            c.restore();
+        }
+    }
+    foodProjectiles(g: Game, ox: number, oy: number) {
+        for (const b of g.beans) {
+            const c=this.c; c.save();c.translate(b.x+ox,b.y+oy);c.rotate(Math.atan2(b.vy,b.vx));
+            this.ellipse(0,0,b.radius,b.radius,'#83b644','#45642e');this.line(-b.radius*.4,-b.radius*.2,b.radius*.4,-b.radius*.2,'#e2efb1',1);c.restore();
+        }
+        for(const p of g.honeyPools) if(p.fall>0) this.honeyJar(p.x+ox,p.y+oy-150*p.fall/.35,Math.max(.6,p.initialRadius/50));
     }
     chestArrows(g: Game, ox: number, oy: number) {
         for (const d of g.drops) {
@@ -441,7 +530,7 @@ export class Renderer {
             this.text(r.kind==='heal'?'生命恢复':r.kind==='evolution'?ITEMS[r.id].evo!:ITEMS[r.id].name,x+width/2,365,count===5?12:15,'#f5f0df','center');
             this.text(r.kind==='heal'?'+30 生命':r.kind==='evolution'?'进化完成':`Lv.${r.level-1} → ${r.level}`,x+width/2,391,12,color,'center');
         });
-        this.button(446,428,284,36,done?'收下奖励 · 继续':'跳过动画 · 查看全部','chest',true);
+        this.buttons = [{ x: 0, y: 0, w: W, h: H, action: 'chest' }];
     }
     time(t: number) { return `${Math.floor(t / 60).toString().padStart(2, '0')}:${Math.floor(t % 60).toString().padStart(2, '0')}`; }
     hud(g: Game) {
@@ -457,8 +546,18 @@ export class Renderer {
         if (g.mode === 'playing') this.buttons.push({ x: 15, y: 267, w: 241, h: 38, action: 'details' });
         this.text(this.time(g.time), SAFE + 16, 27, 27, '#303a2d', 'left', 800);
         this.text('击败 ' + g.kills, 588, 27, 15, '#39442f', 'center');
-        this.button(769, 12, 48, 29, this.muted ? '音 ×' : '音 ♪', 'mute');
-        this.button(825, 12, 51, 29, '暂停', 'pause');
+        this.button(769, 12, 48, 29, '', 'mute');
+        this.button(825, 12, 51, 29, '', 'pause');
+        const ink = '#eee9d8', c = this.c;
+        this.poly([[780,23],[785,23],[791,18],[791,35],[785,30],[780,30]], ink, '');
+        if (this.muted) {
+            this.line(798,23,805,30,ink,2); this.line(805,23,798,30,ink,2);
+        } else {
+            c.save(); c.strokeStyle = ink; c.lineWidth = 1.8;
+            for (const r of [6,10]) { c.beginPath(); c.arc(791,26.5,r,-.8,.8); c.stroke(); }
+            c.restore();
+        }
+        this.line(846,20,846,33,ink,3); this.line(854,20,854,33,ink,3);
     }
     backdrop() { this.c.fillStyle = '#1e261cc9'; this.c.fillRect(0, 0, W, H); }
     panel(title: string, subtitle: string, body: () => void) { this.backdrop(); this.c.save(); this.c.globalAlpha = this.entrance(); this.box(316, 126, 545, 332, '#202a20', 18, '#566147'); this.text(title, 588, 183, 31, '#e9ead7', 'center', 800); this.text(subtitle, 588, 222, 13, '#aeba98', 'center'); body(); this.c.restore(); }
@@ -472,8 +571,8 @@ export class Renderer {
             this.icon(id, x + 15, 200, 35);
             this.text(item.maxLevel === 0 ? '一次性 · 不可升级' : g.levels[id] ? `lv.${g.levels[id]} → lv.${g.levels[id] + 1}` : '新！', x + width - 12, 218, 12, item.color, 'right');
             this.text(item.name, x + 18, 268, 20, '#f1efdc');
-            this.text(item.desc.slice(0, 10), x + 18, 315, 11, '#bfc7ad');
-            if (item.desc.length > 10) this.text(item.desc.slice(10), x + 18, 334, 11, '#bfc7ad');
+            const lines = (item.upgrades?.[g.levels[id]] ?? item.desc).match(/.{1,12}/gu) ?? [];
+            lines.forEach((line, j) => this.text(line, x + 18, 305 + j * 18, 11, '#bfc7ad'));
             this.c.restore();
             this.buttons.push({ x, y: 180, w: width, h: 212, action: 'pick:' + id });
         });

@@ -10,7 +10,8 @@ const assert = require('node:assert/strict');
   const sample=()=>Array.from(c.getImageData(135*ratio,220*ratio,1,1).data);
   const before=sample();g.mode='choice';g.choices=[0,6,10];r.draw(g,0);return [before,sample()];
  });
- assert.ok(pixels[1][0]<pixels[0][0]);
+ // Physical camera cutouts remain fixed above modal dimming.
+ assert.deepEqual(pixels[1],pixels[0]);
  await page.screenshot({path:'artifacts/upgrade-camera-dim.png'});
  for(const [roll,count] of [[0,1],[.8,3],[.99,5]]){
   await page.evaluate(roll=>{const {game:g}=window.__hakimi;g.start();g.spawn=10000;g.rng=()=>roll;g.chest();},roll);

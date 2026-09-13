@@ -40,10 +40,10 @@ function openDetails() {
             badge.style.cssText = 'width:36px;height:36px;float:left;margin-right:10px';
             badge.setAttribute('role', 'img'); badge.setAttribute('aria-label', item.name);
             new Renderer(badge.getContext('2d')!).icon(id, 0, 0, 72);
-            effect.textContent = game.description(id); row.append(badge, name, effect);
+            effect.textContent = game.description(id) + (item.upgrades && !game.evolved[id] && game.levels[id] < item.maxLevel ? ` · 下一级：${item.upgrades[game.levels[id]]}` : ''); row.append(badge, name, effect);
             if (item.prerequisite !== undefined) {
                 const recipe = document.createElement('p'); recipe.className = 'recipe';
-                recipe.textContent = game.evolved[id] ? `已进化 · ${item.desc}` : `进化：${item.name}八级 + ${ITEMS[item.prerequisite].name}（${game.owns(item.prerequisite) ? '已拥有' : '未拥有'}）+ 宝箱 → ${item.evo}`;
+                recipe.textContent = game.evolved[id] ? `已进化 · ${ITEMS[item.prerequisite].name} + 满级能力 + 宝箱` : `进化：${item.name}八级 + ${ITEMS[item.prerequisite].name}（${game.owns(item.prerequisite) ? '已拥有' : '未拥有'}）+ 宝箱 → ${item.evo}`;
                 row.append(recipe);
             }
             content.append(row);
@@ -94,7 +94,7 @@ canvas.addEventListener('pointermove', e => { const p = point(e); render.hover =
 canvas.addEventListener('pointerdown', e => { const p = point(e); render.pressed = render.buttons.find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h)?.action ?? ''; });
 window.addEventListener('pointerup', () => { render.pressed = ''; });
 canvas.addEventListener('pointercancel', () => { render.pressed = ''; });
-canvas.addEventListener('pointerup', e => { render.pressed = '';  if (game.mode === 'ready') { void action('start'); return; } const p = point(e); const b = render.buttons.find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h); if (b)
+canvas.addEventListener('pointerup', e => { render.pressed = '';  if (game.mode === 'ready') { void action('start'); return; } if (game.mode === 'chest') { void action('chest'); return; } const p = point(e); const b = render.buttons.find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h); if (b)
     void action(b.action); });
 window.addEventListener('keydown', e => { if (game.mode === 'ready' && ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) void action('start'); if (e.key === 'Escape') {
     if (game.mode === 'playing')

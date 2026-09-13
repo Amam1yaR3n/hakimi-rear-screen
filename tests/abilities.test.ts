@@ -14,10 +14,10 @@ function enemy(g: Game, x: number, y: number, hp = 1000): Enemy {
 function step(g: Game, seconds: number) { for (let i = 0; i < Math.round(seconds * 60); i++) g.tick(1 / 60); }
 function acquire(g: Game, id: number) { g.mode = 'choice'; g.choices = [id]; g.upgrade(id); }
 
-test('four weapon slots reject stale choices but allow all twelve passives', () => {
+test('four weapon slots reject stale choices but allow all thirteen passives', () => {
     const g = setup(ID.hiss, ID.gum, ID.truck, ID.aura); acquire(g, ID.paw); assert.equal(g.levels[ID.paw], 0);
     for (const [id, item] of ITEMS.entries()) if (item.kind === 'passive') acquire(g, id);
-    assert.equal(g.passives.length, 12); assert.equal(g.levels[ID.revive], 0);
+    assert.equal(g.passives.length, 13); assert.equal(g.levels[ID.revive], 0);
     assert.ok(!g.options().includes(ID.revive));
     acquire(g, ID.amount); assert.equal(g.levels[ID.amount], 2); assert.ok(!g.options().includes(ID.amount));
 });
@@ -132,7 +132,7 @@ test('ten-minute evolved new-ability build keeps effects bounded and numeric sta
         peakTrucks = Math.max(peakTrucks, g.trucks.length); peakPending = Math.max(peakPending, g.pending.length);
         assert.ok(g.trucks.every(t => Number.isFinite(t.x) && Number.isFinite(t.y)));
     }
-    assert.equal(g.won, true); assert.ok(peakTrucks <= 15); assert.ok(peakPending < 40); assert.equal(g.gums.length, 6);
+    assert.equal(g.won, false); assert.ok(g.time >= 600); assert.ok(peakTrucks <= 15); assert.ok(peakPending < 40); assert.equal(g.gums.length, 6);
 });
 
 test('chests use exact tier thresholds, only owned items, and repeated upgrades', () => {
@@ -188,12 +188,12 @@ test('expanded trucks still spawn entirely outside all four screen edges', () =>
         assert.ok(side===0?t.x+ANCHOR.x+radius<0:side===1?t.x+ANCHOR.x-radius>W:side===2?t.y+ANCHOR.y+radius<0:t.y+ANCHOR.y-radius>H);
     }
 });
-test('late enemies grow faster while utility drops fall to one quarter without changing experience drops', () => {
+test('late enemies grow faster while utility drops use the reduced rates without changing experience drops', () => {
     assert.equal(CFG.enemyHP(0),18); assert.ok(CFG.enemyHP(540)>18*(1+540/60)*2);
     assert.ok(CFG.enemySpeed(540)>100);assert.ok(CFG.enemySpeed(540,true)>100);
     assert.ok(CFG.enemyDamage(540)>20);assert.ok(CFG.spawnInterval(540)<.09);
-    assert.equal(CFG.itemDrops.heal+CFG.itemDrops.magnet+CFG.itemDrops.bomb,.0175);
-    for(const [roll,kind] of [[.00874,'heal'],[CFG.itemDrops.heal,'magnet'],[CFG.itemDrops.heal+CFG.itemDrops.magnet,'bomb'],[.0175,undefined]] as const){
+    assert.equal(CFG.itemDrops.heal+CFG.itemDrops.magnet+CFG.itemDrops.bomb,.00875);
+    for(const [roll,kind] of [[.004374,'heal'],[CFG.itemDrops.heal,'magnet'],[CFG.itemDrops.heal+CFG.itemDrops.magnet,'bomb'],[.00875,undefined]] as const){
         const g=setup();g.rng=()=>roll;const e=enemy(g,0,0,1);g.damage(e,2);
         assert.equal(g.drops.filter(d=>d.kind).length,kind?1:0);if(kind)assert.equal(g.drops[1].kind,kind);
         assert.equal(g.drops[0].value,2);
