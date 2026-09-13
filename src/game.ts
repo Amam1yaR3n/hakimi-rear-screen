@@ -122,7 +122,7 @@ export class Game {
     get attackRange() { return 1 + this.levels[ID.range] * .1; }
     get hissRange() { return (105 + (this.legacyLevel(ID.hiss) - 1) * 6 + (this.evolved[ID.hiss] ? 12 : 0)) * this.attackRange; }
     get auraRange() { return (55 + this.legacyLevel(ID.aura) * 9) * (this.evolved[ID.aura] ? 1.25 : 1) * this.attackRange; }
-    get auraDamage() { return (5 + this.legacyLevel(ID.aura) * 3) * 1.25 * (this.evolved[ID.aura] ? 1.2 : 1) * this.attack; }
+    get auraDamage() { return (9 + this.legacyLevel(ID.aura) * 3) * 1.25 * (this.evolved[ID.aura] ? 1.5 : 1) * this.attack; }
     get duration() { return 1 + this.levels[ID.duration] * .1; }
     get projectileSpeed() { return 1 + this.levels[ID.projectileSpeed] * .1; }
     get luck() { return this.levels[ID.luck]; }

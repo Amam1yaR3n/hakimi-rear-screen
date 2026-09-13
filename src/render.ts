@@ -517,8 +517,6 @@ export class Renderer {
         this.eliteHisses(g, ox, oy, true);
         if (g.spinosaurusActive) {
             this.spinosaurus(ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
-            this.box(ANCHOR.x - 57, ANCHOR.y - 77, 114, 24, '#303b2de8', 8);
-            this.text('棘背龙形态', ANCHOR.x, ANCHOR.y - 65, 13, '#efffc9', 'center');
         } else this.character(0, ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
         if (g.slash) {
             this.clawSwipe(g);
