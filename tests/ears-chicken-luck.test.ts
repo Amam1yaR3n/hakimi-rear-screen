@@ -55,7 +55,7 @@ test('luck chest and item probability boundaries at every level',()=>{
  for(let l=0;l<=5;l++){
   for(const [roll,count] of [[0,1],[(70-4*l)/100-1e-8,1],[(70-4*l)/100,3],[(95-l)/100-1e-8,3],[(95-l)/100,5]] ) {const g=setup();g.levels[ID.luck]=l;g.rng=()=>roll;g.chest();assert.equal(g.chestRewards.length,count);}
   const m=1+.2*l;
-  for(const [roll,kind] of [[0,'heal'],[.004375*m,'magnet'],[.006875*m,'bomb'],[.00875*m+1e-8,undefined]] as const){const g=setup();g.levels[ID.luck]=l;g.rng=()=>roll;const e=enemy(g,100,0,true);g.damage(e,e.hp);assert.equal(g.drops.find(d=>d.kind)?.kind,kind);}
+  for(const [roll,kind] of [[0,'heal'],[.00525*m,'magnet'],[.00725*m,'bomb'],[.00875*m+1e-8,undefined]] as const){const g=setup();g.levels[ID.luck]=l;g.rng=()=>roll;const e=enemy(g,100,0,true);g.damage(e,e.hp);assert.equal(g.drops.find(d=>d.kind)?.kind,kind);}
   for(const roll of [l/10-1e-8,l/10]){const g=setup();g.levels[ID.luck]=l;g.rng=()=>Math.max(0,roll);const e=enemy(g);g.damage(e,e.hp);assert.equal(g.drops[0].value,l>0&&roll<l/10?4:2);}
  }
 });

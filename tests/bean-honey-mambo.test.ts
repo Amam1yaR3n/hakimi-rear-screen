@@ -13,6 +13,7 @@ test('all eight levels follow the approved tables',()=>{
  const mambo=[[10,40,.5,2],[10,80,.5,2],[10,80,1,2.75],[20,90,1,2.75],[20,90,1.5,3.5],[30,100,1.5,3.5],[30,100,2,4.25],[40,110,2,4.25]];
  for(let i=0;i<8;i++){for(const id of [ID.bean,ID.honey,ID.mambo])g.levels[id]=i+1;
  const b=g.beanStats,h=g.honeyStats,m=g.mamboStats;
+ assert.equal(h.interval,5);assert.ok(b.pierce<=2);
  [b.damage,b.count,b.interval,b.pierce].forEach((v,j)=>close(v,beans[i][j]));
  [h.damage,h.count,h.radius,h.life].forEach((v,j)=>close(v,honey[i][j]));
  [m.damage,m.width,m.life,m.interval].forEach((v,j)=>close(v,mambo[i][j]));}
@@ -20,6 +21,7 @@ test('all eight levels follow the approved tables',()=>{
 test('passive scaling and exclusions in both forms',()=>{
  for(const evolved of [false,true]){const g=setup();for(const id of [ID.bean,ID.honey,ID.mambo]){g.levels[id]=8;g.evolved[id]=evolved;}
  const b=g.beanStats,h=g.honeyStats,m=g.mamboStats;
+ assert.equal(h.interval,5);assert.ok(b.pierce<=2);
  for(const id of [ID.attack,ID.cooldown,ID.range,ID.duration,ID.projectileSpeed,ID.move])g.levels[id]=5;g.levels[ID.amount]=2;
  close(g.beanStats.damage,b.damage*1.5);close(g.beanStats.interval,b.interval*.6);close(g.beanStats.radius,b.radius*1.5);close(g.beanStats.speed,b.speed*1.5);assert.equal(g.beanStats.life,3);assert.equal(g.beanStats.count,b.count+2);
  close(g.honeyStats.damage,h.damage*1.5);close(g.honeyStats.interval,h.interval*.6);close(g.honeyStats.radius,h.radius*1.5);close(g.honeyStats.life,h.life*1.5);assert.equal(g.honeyStats.count,h.count+2);assert.equal(g.honeyStats.speed,evolved?2:0);

@@ -1,5 +1,6 @@
 import { Game, SLASH_DURATION, CHICKEN_IMPACT, CHICKEN_DURATION } from './game';
-import { W, H, SAFE, ANCHOR, ITEMS, ID } from './config';
+import type { EliteHiss } from './game';
+import { W, H, SAFE, ANCHOR, ITEMS, ID, ELITE_HISS } from './config';
 import { characterSprite } from './sprites';
 export type Button = {
     x: number;
@@ -63,7 +64,45 @@ export class Renderer {
         c.lineJoin = 'round';
         c.stroke();
     } }
-    character(type: number, x: number, y: number, scale = 1, flash = false, t = 0, movement = 1, lean = 0) {
+    spinosaurus(x: number, y: number, scale = 1, flash = false, t = 0, movement = 0, lean = 0) {
+        const c = this.c, ink = '#202720', fur = flash ? '#fff9d5' : '#969b85';
+        c.save(); c.translate(x, y); c.scale(scale, scale);
+        c.rotate(lean + Math.sin(t * 7) * .025 * movement);
+        this.ellipse(0, 28, 37, 7, '#00000028');
+        // Braced legs and a high arched back retain Hakimi's grey-green tabby palette.
+        for (const [legX, footX] of [[-24, -30], [-12, -9], [17, 22], [29, 35]]) {
+            this.line(legX, 0, footX, 25 + Math.sin(t * 10 + legX) * 2 * movement, ink, 10);
+            this.line(legX, 0, footX, 25 + Math.sin(t * 10 + legX) * 2 * movement, fur, 6);
+            this.ellipse(footX, 27, 6, 3, '#ede9d9', ink);
+        }
+        c.beginPath(); c.moveTo(-26, -12); c.quadraticCurveTo(-44, -20, -39, 23);
+        c.strokeStyle = ink; c.lineWidth = 10; c.stroke();
+        c.strokeStyle = fur; c.lineWidth = 6; c.stroke();
+        c.beginPath(); c.moveTo(-29, 5);
+        c.bezierCurveTo(-34, -53, 3, -62, 19, -22);
+        c.quadraticCurveTo(29, -7, 25, 8);
+        c.quadraticCurveTo(0, -11, -29, 5);
+        c.fillStyle = fur; c.fill(); c.strokeStyle = ink; c.lineWidth = 2.8; c.stroke();
+        for (const [px, py] of [[-29, -20], [-26, -30], [-21, -38], [-14, -44], [-6, -46], [2, -43], [9, -36]])
+            this.poly([[px - 4, py + 4], [px - 2, py - 9], [px + 6, py + 3]], fur, ink);
+        for (const bx of [-18, -8, 2]) this.line(bx, -31, bx + 4, -16, '#666e59', 4);
+        this.poly([[16, -9], [12, -24], [29, -15]], fur);
+        this.poly([[32, -14], [42, -22], [42, -3]], fur);
+        this.ellipse(30, -1, 18, 17, fur, ink);
+        this.ellipse(32, 7, 15, 9, '#ede9d9');
+        this.line(22, -15, 24, -8, '#666e59', 3);
+        this.line(29, -16, 30, -9, '#666e59', 3);
+        for (const ex of [24, 37]) {
+            this.ellipse(ex, -3, 4.5, 5.5, ink);
+            this.ellipse(ex - 1, -5, 1.4, 1.4, '#fff');
+        }
+        this.poly([[28, 4], [34, 4], [31, 8]], '#686b62', '');
+        this.ellipse(31, 11, 4, 3, ink);
+        this.line(17, 6, 8, 3, '#ede9d9', 1);
+        this.line(43, 6, 51, 3, '#ede9d9', 1);
+        c.restore();
+    }
+    character(type: number, x: number, y: number, scale = 1, flash = false, t = 0, movement = 1, lean = 0, hissing = false) {
         const c = this.c;
         c.save();
         c.translate(x, y - Math.abs(Math.sin(t * 10)) * 2.5 * movement);
@@ -71,7 +110,7 @@ export class Renderer {
         c.rotate(Math.sin(t * 7) * .035 * movement + lean);
         const outline = '#202720';
         this.ellipse(0, 27, 28, 7, '#00000028');
-        const sprite = characterSprite(type, flash);
+        const sprite = characterSprite(type, flash, hissing);
         if (sprite) {
             c.drawImage(sprite, -36, -40, 72, 72);
             c.restore();
@@ -296,6 +335,53 @@ export class Renderer {
         this.ellipse(6, 2, 7, 7, '#dc928c');
         c.restore();
     }
+    private eliteHissPath(hiss: EliteHiss, radius: number) {
+        const c = this.c, halfAngle = ELITE_HISS[hiss.kind].halfAngle;
+        c.beginPath();
+        if (hiss.kind === 'cone') c.moveTo(0, 0);
+        c.arc(0, 0, radius, hiss.angle - halfAngle, hiss.angle + halfAngle);
+        c.closePath();
+    }
+    private eliteHisses(g: Game, ox: number, oy: number, released: boolean) {
+        const c = this.c;
+        for (const e of g.enemies) {
+            const hiss = e.hiss;
+            if (!e.alive || !hiss || hiss.phase !== (released ? 'recovery' : 'windup')) continue;
+            const shape = ELITE_HISS[hiss.kind], x = hiss.x + ox, y = hiss.y + oy;
+            // A source outside the screen may still threaten the visible playfield.
+            if (x + shape.radius < 0 || x - shape.radius > W || y + shape.radius < 0 || y - shape.radius > H) continue;
+            c.save(); c.translate(x, y);
+            if (!released) {
+                const progress = Math.max(0, Math.min(1, 1 - hiss.remaining / shape.windup));
+                this.eliteHissPath(hiss, shape.radius);
+                c.fillStyle = '#ed29332e'; c.fill();
+                this.eliteHissPath(hiss, shape.radius * Math.sqrt(progress));
+                c.fillStyle = '#f52f4248'; c.fill();
+                this.eliteHissPath(hiss, shape.radius);
+                c.strokeStyle = '#70232be6'; c.lineWidth = 6; c.stroke();
+                const pulse = .78 + .22 * Math.sin(progress * Math.PI * 12);
+                c.strokeStyle = `rgba(255, 76, 83, ${pulse})`; c.lineWidth = 3; c.stroke();
+                this.box(-49, -66, 98, 22, '#48252bec', 6);
+                this.text(`哈气蓄力 ${hiss.remaining.toFixed(1)}`, 0, -55, 12, '#ffe5de', 'center');
+            } else {
+                const progress = Math.max(0, Math.min(1, 1 - hiss.remaining / ELITE_HISS.recovery));
+                // The whole warned area flashes at impact; expanding rings are visual only.
+                this.eliteHissPath(hiss, shape.radius);
+                c.fillStyle = `rgba(255, 102, 70, ${.35 * Math.max(0, 1 - progress * 5)})`; c.fill();
+                c.strokeStyle = `rgba(255, 197, 163, ${.8 * (1 - progress)})`; c.lineWidth = 3; c.stroke();
+                for (let i = 0; i < 3; i++) {
+                    const travel = Math.min(1, progress * 1.5 - i * .14);
+                    if (travel <= 0) continue;
+                    c.beginPath();
+                    c.arc(0, 0, shape.radius * travel, hiss.angle - shape.halfAngle, hiss.angle + shape.halfAngle);
+                    c.strokeStyle = i === 0 ? '#fff1d9' : '#ff826f';
+                    c.globalAlpha = (1 - progress) * (1 - i * .18);
+                    c.lineWidth = 5 - i; c.stroke();
+                }
+            }
+            c.restore();
+        }
+    }
     draw(g: Game, dt = 1 / 60) {
         const c = this.c;
         this.clock += dt;
@@ -356,7 +442,10 @@ export class Renderer {
                     this.line(x + 1, y - 5, x + 1, y + 5, '#fff', 2.5);
                     this.line(x - 3, y - 1, x - 3, y + 5, '#fff', 2.5);
                     this.line(x + 6, y - 5, x + 6, y + 5, '#fff', 2.5);
-                } else {
+                } else if (d.kind === 'spinosaurus') {
+                    this.ellipse(x, y, 22, 22, '#d9eec688', '#efffc9');
+                    this.spinosaurus(x - 3, y + 5, .43);
+                } else if (d.kind === 'bomb') {
                     this.line(x + 3, y - 12, x + 10, y - 21, '#5a3a22', 3);
                     this.ellipse(x + 11, y - 22, 4, 4, '#ffdc70');
                     this.ellipse(x, y, 14, 14, '#30363c', '#141e26');
@@ -385,11 +474,29 @@ export class Renderer {
             c.arc(ANCHOR.x, ANCHOR.y, radius, 0, Math.PI * 2);
             c.stroke();
         }
+        this.eliteHisses(g, ox, oy, false);
         for (const e of [...g.enemies].sort((a, b) => a.y - b.y)) {
+            if (!e.alive) continue;
             const x = sx(e.x), y = sy(e.y);
             if (x < -50 || x > W + 50 || y < -50 || y > H + 50)
                 continue;
-            this.character(e.elite ? 1 : 2, x, y, e.elite ? 1.05 : .62, e.flash > 0, g.time + e.x * .007 + e.y * .009);
+            const braced = !!e.hiss && e.hiss.phase !== 'chase';
+            this.character(e.elite ? 1 : 2, x, y, e.elite ? 1.05 : .62, e.flash > 0,
+                g.time + e.x * .007 + e.y * .009, braced ? 0 : 1, 0, e.hiss?.phase === 'recovery');
+            if (g.spinosaurusActive) {
+                const top = y - (e.elite ? 48 : 32);
+                this.box(x - 5, top - 8, 10, 17, '#303b2de6', 4);
+                this.text('!', x, top, 15, '#f2e6a2', 'center', 800);
+            }
+        }
+        if (g.intimidationWave) {
+            const age = g.time - g.intimidationWave.startedAt;
+            if (age >= 0 && age < .8) {
+                c.save(); c.globalAlpha = (1 - age / .8) * .8;
+                const radius = 25 + age * 850;
+                this.ellipse(sx(g.intimidationWave.x), sy(g.intimidationWave.y), radius, radius, 'transparent', '#f0ffd0');
+                c.restore();
+            }
         }
         for (const wave of g.waves) {
             c.save();
@@ -406,7 +513,12 @@ export class Renderer {
         }
         this.newAttacks(g, ox, oy);
         this.foodProjectiles(g, ox, oy);
-        this.character(0, ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
+        this.eliteHisses(g, ox, oy, true);
+        if (g.spinosaurusActive) {
+            this.spinosaurus(ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
+            this.box(ANCHOR.x - 57, ANCHOR.y - 77, 114, 24, '#303b2de8', 8);
+            this.text('棘背龙形态', ANCHOR.x, ANCHOR.y - 65, 13, '#efffc9', 'center');
+        } else this.character(0, ANCHOR.x, ANCHOR.y, .85, g.invulnerable > 0, g.time, this.motion, this.lean);
         if (g.slash) {
             this.clawSwipe(g);
         }
@@ -536,14 +648,6 @@ export class Renderer {
     hud(g: Game) {
         this.cameraRing(143, this.xp, '#bed984');
         this.cameraRing(429, this.hp, this.hp <= .25 ? '#f07868' : '#e7a394');
-        this.box(15, 267, 241, 38, this.hover === 'details' ? '#fff7e5' : '#f2eddcee', 8);
-        this.text('能力', 36, 286, 11, '#505943', 'center');
-        for (let slot = 0; slot < 4; slot++) {
-            const x = 55 + slot * 49, id = g.weapons[slot];
-            if (id === undefined) { this.box(x, 271, 29, 29, '#d6d7c6', 6); this.text('＋', x + 14, 286, 14, '#a6ad98', 'center'); }
-            else { this.icon(id, x, 271, 29); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, 286, 11, '#505943', 'center'); }
-        }
-        if (g.mode === 'playing') this.buttons.push({ x: 15, y: 267, w: 241, h: 38, action: 'details' });
         this.text(this.time(g.time), SAFE + 16, 27, 27, '#303a2d', 'left', 800);
         this.text('击败 ' + g.kills, 588, 27, 15, '#39442f', 'center');
         this.button(769, 12, 48, 29, '', 'mute');
@@ -564,6 +668,18 @@ export class Renderer {
     choices(g: Game) {
         this.backdrop();
         const width = 170, gap = 14, total = g.choices.length * width + (g.choices.length - 1) * gap, start = SAFE + (W - SAFE - total) / 2;
+        const center = SAFE + (W - SAFE) / 2;
+        this.c.save(); this.c.globalAlpha = this.entrance();
+        this.text(`等级 ${g.level}`, center, 140, 28, '#e9ead7', 'center', 800);
+        const barX = center - 120.5, barY = 416;
+        this.box(barX, barY, 241, 38, '#f2eddc', 8);
+        this.text('能力', barX + 21, barY + 19, 11, '#505943', 'center');
+        for (let slot = 0; slot < 4; slot++) {
+            const x = barX + 40 + slot * 49, id = g.weapons[slot];
+            if (id === undefined) { this.box(x, barY + 4, 29, 29, '#d6d7c6', 6); this.text('＋', x + 14, barY + 19, 14, '#a6ad98', 'center'); }
+            else { this.icon(id, x, barY + 4, 29); this.text(g.evolved[id] ? '★' : String(g.levels[id]), x + 37, barY + 19, 11, '#505943', 'center'); }
+        }
+        this.c.restore();
         g.choices.forEach((id, i) => {
             const x = start + i * (width + gap), item = ITEMS[id];
             this.c.save(); this.c.globalAlpha = this.entrance(i * .055);
@@ -580,13 +696,13 @@ export class Renderer {
     private cameraRing(y: number, progress: number, color: string) {
         const c = this.c, start = -Math.PI / 2;
         c.save();
-        c.lineWidth = 7;
+        c.lineWidth = 14;
         c.lineCap = 'round';
-        c.beginPath(); c.arc(135.6, y, 120, 0, Math.PI * 2);
+        c.beginPath(); c.arc(135.6, y, 123.5, 0, Math.PI * 2);
         c.strokeStyle = '#343d30'; c.stroke();
         const value = Math.max(0, Math.min(1, progress));
         if (value > .001) {
-            c.beginPath(); c.arc(135.6, y, 120, start, start + Math.PI * 2 * value);
+            c.beginPath(); c.arc(135.6, y, 123.5, start, start + Math.PI * 2 * value);
             c.strokeStyle = color; c.stroke();
         }
         c.restore();

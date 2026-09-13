@@ -193,7 +193,7 @@ test('late enemies grow faster while utility drops use the reduced rates without
     assert.ok(CFG.enemySpeed(540)>100);assert.ok(CFG.enemySpeed(540,true)>100);
     assert.ok(CFG.enemyDamage(540)>20);assert.ok(CFG.spawnInterval(540)<.09);
     assert.equal(CFG.itemDrops.heal+CFG.itemDrops.magnet+CFG.itemDrops.bomb,.00875);
-    for(const [roll,kind] of [[.004374,'heal'],[CFG.itemDrops.heal,'magnet'],[CFG.itemDrops.heal+CFG.itemDrops.magnet,'bomb'],[.00875,undefined]] as const){
+    for(const [roll,kind] of [[.005249,'heal'],[CFG.itemDrops.heal,'magnet'],[CFG.itemDrops.heal+CFG.itemDrops.magnet,'bomb'],[.00875,undefined]] as const){
         const g=setup();g.rng=()=>roll;const e=enemy(g,0,0,1);g.damage(e,2);
         assert.equal(g.drops.filter(d=>d.kind).length,kind?1:0);if(kind)assert.equal(g.drops[1].kind,kind);
         assert.equal(g.drops[0].value,2);

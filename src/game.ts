@@ -1,6 +1,15 @@
-import { CFG, ANCHOR, W, H, SAFE, ITEMS, ID } from './config';
+import { CFG, ANCHOR, W, H, SAFE, ITEMS, ID, ELITE_HISS } from './config';
 export type Mode = 'ready' | 'playing' | 'paused' | 'details' | 'choice' | 'evolution' | 'chest' | 'over';
+export type EliteHiss = {
+    phase: 'chase' | 'windup' | 'recovery';
+    kind: 'circle' | 'cone';
+    remaining: number;
+    x: number;
+    y: number;
+    angle: number;
+};
 export type Enemy = {
+    hiss?: EliteHiss;
     slowUntil?: number;
     uid: number;
     x: number;
@@ -17,7 +26,7 @@ export type Drop = {
     y: number;
     chest: boolean;
     value: number;
-    kind?: 'heal' | 'magnet' | 'bomb';
+    kind?: 'heal' | 'magnet' | 'bomb' | 'spinosaurus';
     attracted?: boolean;
 };
 export type Wave = { x: number; y: number; radius: number; maxRadius: number; angle: number; halfAngle: number; damage: number; hit: Set<number> };
@@ -73,6 +82,9 @@ export class Game {
     honeyAngle = 0;
     chicken: { age: number; evolved: boolean; settled: boolean } | null = null;
     bombFlash = 0;
+    spinosaurusUntil = 0;
+    intimidationWave: { x: number; y: number; startedAt: number } | null = null;
+    get spinosaurusActive() { return this.time < this.spinosaurusUntil; }
     grid = new SpatialGrid();
     choices: number[] = [];
     spawn = 0;
@@ -128,13 +140,13 @@ export class Game {
         return { damage: (e ? 30 : 10 + (l >= 4 ? 10 : 0) + (l >= 8 ? 10 : 0)) * this.attack,
             count: (e ? 4 : 1 + Number(l >= 2) + Number(l >= 5) + Number(l >= 7)) + this.amount,
             interval: (e ? .4 : 1.2 - (l >= 3 ? .1 : 0) - (l >= 8 ? .1 : 0)) * this.cooldown,
-            speed: (e ? 840 : 420) * this.projectileSpeed, radius: 5 * this.attackRange, pierce: e ? 3 : l >= 6 ? 2 : 1, life: 3 };
+            speed: (e ? 840 : 420) * this.projectileSpeed, radius: 5 * this.attackRange, pierce: e || l >= 6 ? 2 : 1, life: 3 };
     }
     get honeyStats() {
         const l = this.levels[ID.honey], e = this.evolved[ID.honey];
         return { damage: (e ? 40 : 10 + 10 * Number(l >= 3) + 10 * Number(l >= 5) + 5 * Number(l >= 7) + 5 * Number(l >= 8)) * this.attack,
             count: (e ? 4 : 1 + Number(l >= 2) + Number(l >= 4) + Number(l >= 6)) + this.amount,
-            interval: (e ? 4 : 4.5) * this.cooldown,
+            interval: 5 * this.cooldown,
             life: (e ? 4 : 2 + .5 * Number(l >= 3) + .5 * Number(l >= 5)) * this.duration,
             radius: (e ? 56 : 28 * (1 + .2 * (Number(l >= 2) + Number(l >= 4) + Number(l >= 6) + Number(l >= 8)))) * this.attackRange,
             speed: e ? 1 + this.levels[ID.projectileSpeed] * .1 + this.levels[ID.move] * .1 : 0 };
@@ -219,8 +231,21 @@ export class Game {
     offer() { const options = this.options(); if (!options.length) {
         this.player.hp = Math.min(this.maxHP, this.player.hp + 30); return;
     }
-    for (let i = options.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [options[i], options[j]] = [options[j], options[i]]; }
-    this.choices = options.slice(0, 3); this.mode = 'choice'; this.onSound('level'); }
+    if (this.weapons.length < 4) {
+        // Favor abilities modestly until all four active slots are occupied.
+        this.choices = [];
+        while (options.length && this.choices.length < 3) {
+            const weights = options.map(id => ITEMS[id].kind === 'weapon' ? 1.5 : 1);
+            let roll = this.rng() * weights.reduce((sum, weight) => sum + weight, 0);
+            let index = 0;
+            while (index < options.length - 1 && roll >= weights[index]) roll -= weights[index++];
+            this.choices.push(options.splice(index, 1)[0]);
+        }
+    } else {
+        for (let i = options.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [options[i], options[j]] = [options[j], options[i]]; }
+        this.choices = options.slice(0, 3);
+    }
+    this.mode = 'choice'; this.onSound('level'); }
     upgrade(id: number) {
         if (this.mode !== 'choice' || !this.choices.includes(id) || !this.options().includes(id)) return;
         this.applyUpgrade(id);
@@ -269,11 +294,57 @@ export class Game {
     else {
         y += this.rng() * (H + 90);
         x = side === 2 ? x : W - ANCHOR.x + 45;
-    } const hp = CFG.enemyHP(this.time) * (elite ? 12 : 1); const e = this.pool.pop() ?? {} as Enemy; Object.assign(e, { uid: this.nextEnemyId++, x: this.player.x + x, y: this.player.y + y, hp, max: hp, r: elite ? 27 : 17, elite, flash: 0, alive: true, slowUntil: 0 }); this.enemies.push(e); }
+    } const hp = CFG.enemyHP(this.time) * (elite ? 12 : 1); const e = this.pool.pop() ?? {} as Enemy; Object.assign(e, { uid: this.nextEnemyId++, x: this.player.x + x, y: this.player.y + y, hp, max: hp, r: elite ? 27 : 17, elite, flash: 0, alive: true, slowUntil: 0,
+        hiss: elite ? { phase: 'chase', kind: 'circle', remaining: ELITE_HISS.firstDelay, x: 0, y: 0, angle: 0 } : undefined }); this.enemies.push(e); }
+    hurtPlayer(amount: number) {
+        if (this.invulnerable > 0) return;
+        this.player.hp -= amount;
+        this.invulnerable = .55;
+        this.onSound('hurt');
+    }
+    private eliteHissHits(hiss: EliteHiss) {
+        const shape = ELITE_HISS[hiss.kind], playerRadius = 17;
+        const dx = this.player.x - hiss.x, dy = this.player.y - hiss.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance > shape.radius + playerRadius) return false;
+        if (hiss.kind === 'circle' || distance <= playerRadius) return true;
+        const angle = Math.atan2(dy, dx) - hiss.angle;
+        if (Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) <= shape.halfAngle) return true;
+        // Outside the angular span, only the two finite radial edges can overlap the player.
+        return [-shape.halfAngle, shape.halfAngle].some(offset => {
+            const ux = Math.cos(hiss.angle + offset), uy = Math.sin(hiss.angle + offset);
+            const along = Math.max(0, Math.min(shape.radius, dx * ux + dy * uy));
+            return Math.hypot(dx - along * ux, dy - along * uy) <= playerRadius;
+        });
+    }
+    private advanceEliteHisses(dt: number) {
+        for (const e of this.enemies) {
+            const hiss = e.hiss;
+            if (!e.alive || !e.elite || !hiss) continue;
+            hiss.remaining -= dt;
+            if (hiss.remaining > 0) continue;
+            if (hiss.phase === 'chase') {
+                hiss.phase = 'windup';
+                hiss.remaining = ELITE_HISS[hiss.kind].windup;
+                hiss.x = e.x; hiss.y = e.y;
+                hiss.angle = Math.atan2(this.player.y - e.y, this.player.x - e.x);
+            } else if (hiss.phase === 'windup') {
+                hiss.phase = 'recovery';
+                hiss.remaining = ELITE_HISS.recovery;
+                this.onSound('eliteHiss');
+                if (this.eliteHissHits(hiss)) this.hurtPlayer(CFG.enemyDamage(this.time) * ELITE_HISS.damageMultiplier);
+            } else {
+                hiss.phase = 'chase';
+                hiss.kind = hiss.kind === 'circle' ? 'cone' : 'circle';
+                hiss.remaining = ELITE_HISS.chaseDuration;
+            }
+        }
+    }
     damage(e: Enemy, n: number, rewards = true, riceMultiplier = 1) { if (!e.alive)
         return; e.hp -= n; this.onEffect(e.hp <= 0 ? 'kill' : 'hit', e.x, e.y); e.flash = .1; this.numbers.push({ x: e.x, y: e.y - e.r, value: Math.round(n), life: .7 });
         if (this.numbers.length > 180) this.numbers.shift(); if (e.hp <= 0) {
         e.alive = false;
+        e.hiss = undefined;
         this.kills++;
         if (e.elite) this.drops.push({ x: e.x, y: e.y, chest: true, value: 0 });
         if (!rewards) return;
@@ -285,7 +356,9 @@ export class Game {
         // Round cumulative base odds before scaling to keep exact tier boundaries stable.
         const magnetThreshold = Number((CFG.itemDrops.heal + CFG.itemDrops.magnet).toFixed(8));
         const bombThreshold = Number((magnetThreshold + CFG.itemDrops.bomb).toFixed(8));
-        const kind = roll < CFG.itemDrops.heal * dropMultiplier ? 'heal' : roll < magnetThreshold * dropMultiplier ? 'magnet' : roll < bombThreshold * dropMultiplier ? 'bomb' : undefined;
+        // Keep the new form's odds tied to the Xiaomi orb, including luck.
+        const spinosaurusThreshold = Number((bombThreshold + CFG.itemDrops.magnet).toFixed(8));
+        const kind = roll < CFG.itemDrops.heal * dropMultiplier ? 'heal' : roll < magnetThreshold * dropMultiplier ? 'magnet' : roll < bombThreshold * dropMultiplier ? 'bomb' : roll < spinosaurusThreshold * dropMultiplier ? 'spinosaurus' : undefined;
         if (kind) this.drops.push({ x: e.x + 12, y: e.y, chest: false, value: 0, kind });
     } }
     collect(d: Drop) {
@@ -298,8 +371,11 @@ export class Game {
             this.bombFlash = .45;
             for (const e of this.enemies) {
                 const x = e.x - this.player.x + ANCHOR.x, y = e.y - this.player.y + ANCHOR.y;
-                if (x + e.r >= SAFE && x - e.r <= W && y + e.r >= 0 && y - e.r <= H) this.damage(e, e.hp);
+                if (x + e.r >= SAFE && x - e.r <= W && y + e.r >= 0 && y - e.r <= H) this.damage(e, e.elite ? e.max * .5 : e.hp);
             }
+        } else if (d.kind === 'spinosaurus') {
+            this.spinosaurusUntil = this.time + 10;
+            this.intimidationWave = { x: this.player.x, y: this.player.y, startedAt: this.time };
         } else if (d.chest) this.chest();
         else this.xp += d.value * (1 + this.levels[ID.xp] * .1);
         if (d.kind) this.onSound('chest');
@@ -445,7 +521,8 @@ export class Game {
             for (const e of this.grid.query((oldX + t.x) / 2, (oldY + t.y) / 2, step / 2 + 90 * this.attackRange)) {
                 const ex = e.x - (oldX + t.x) / 2, ey = e.y - (oldY + t.y) / 2;
                 if (Math.abs(ex * t.dx + ey * t.dy) > 75 * this.attackRange + step / 2 + e.r || Math.abs(-ex * t.dy + ey * t.dx) > 32.5 * this.attackRange + e.r || t.hit.has(e.uid)) continue;
-                t.hit.add(e.uid); this.damage(e, t.damage); e.x += t.dx * 45; e.y += t.dy * 45;
+                t.hit.add(e.uid); this.damage(e, t.damage);
+                if (!e.hiss || e.hiss.phase === 'chase') { e.x += t.dx * 45; e.y += t.dy * 45; }
             }
         }
         this.trucks = this.trucks.filter(t => t.life > 0);
@@ -521,19 +598,18 @@ export class Game {
             if (!e.alive)
                 continue;
             const dx = this.player.x - e.x, dy = this.player.y - e.y, d = Math.hypot(dx, dy) || 1;
-            const speed = CFG.enemySpeed(this.time, e.elite) * ((e.slowUntil ?? 0) > this.time ? .5 : 1);
-            e.x += dx / d * speed * dt;
-            e.y += dy / d * speed * dt;
+            const speed = CFG.enemySpeed(this.time, e.elite) * (this.spinosaurusActive ? .3 : (e.slowUntil ?? 0) > this.time ? .5 : 1);
+            if (!e.hiss || e.hiss.phase === 'chase') {
+                e.x += dx / d * speed * dt;
+                e.y += dy / d * speed * dt;
+            }
             e.flash = Math.max(0, e.flash - dt);
             if (d > 1500 && !e.elite) {
                 e.alive = false;
                 continue;
             }
-            if (d < e.r + 17 && this.invulnerable <= 0) {
-                this.player.hp -= CFG.enemyDamage(this.time) * (e.elite ? 2 : 1);
-                this.invulnerable = .55;
-                this.onSound('hurt');
-            }
+            if (Math.hypot(this.player.x - e.x, this.player.y - e.y) < e.r + 17)
+                this.hurtPlayer(CFG.enemyDamage(this.time) * (e.elite ? 2 : 1));
         }
         this.grid.rebuild(this.enemies);
         this.attacks(dt);
@@ -547,6 +623,8 @@ export class Game {
             }
         }
         this.waves = this.waves.filter(wave => wave.radius < wave.maxRadius);
+        // Resolve after player attacks: killing an elite during its windup cancels the hiss.
+        this.advanceEliteHisses(dt);
         for (let i = this.drops.length - 1; i >= 0; i--) {
             const d = this.drops[i], dist = Math.hypot(d.x - this.player.x, d.y - this.player.y);
             const pickupRadius = (!d.chest && !d.kind ? CFG.ricePickup : CFG.pickup) * (1 + this.levels[ID.pickup] * .2);
@@ -580,7 +658,7 @@ export class Game {
                 this.reviveUsed = true; this.player.hp = this.maxHP * .5; this.invulnerable = 3;
                 for (const e of this.enemies) {
                     const dx = e.x - this.player.x, dy = e.y - this.player.y, d = Math.hypot(dx, dy);
-                    if (d < 150) { e.x += (d ? dx / d : 1) * 100; e.y += (d ? dy / d : 0) * 100; }
+                    if (d < 150 && (!e.hiss || e.hiss.phase === 'chase')) { e.x += (d ? dx / d : 1) * 100; e.y += (d ? dy / d : 0) * 100; }
                 }
                 this.onEffect('heal', this.player.x, this.player.y); this.onSound('evolve');
             } else { this.player.hp = 0; this.mode = 'over'; this.won = false; }

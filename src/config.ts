@@ -1,6 +1,12 @@
-const endlessGrowth = (t: number) => 1 + Math.max(0, t - 600) / 120;
+const ENDLESS_START = 480;
+const endlessGrowth = (t: number) => 1 + Math.max(0, t - ENDLESS_START) / 120;
 export const W = 904, H = 572, SAFE = 271.2, ANCHOR = { x: 588, y: 330 };
-export const CFG = { duration: 600, speed: 142, pickup: 52, ricePickup: 110, baseHP: 100, enemyCap: 420, spawnInterval: (t: number) => Math.max(.065, .55 - t * .0015), enemyHP: (t: number) => 18 * (1 + t / 45) * (1 + .8 * (t / 600) ** 2) * endlessGrowth(t), xpNeed: (level: number) => Math.round(7 + level * 2.5), contactDamage: 12, enemySpeed: (t: number, elite = false) => (elite ? 52 + Math.min(60, t * .1) : 42 + Math.min(70, t * .12)) * Math.sqrt(endlessGrowth(t)), enemyDamage: (t: number) => 12 * (1 + Math.max(0, t - 180) / 420) * endlessGrowth(t), itemDrops: { heal: .004375, magnet: .0025, bomb: .001875 } };
+export const ELITE_HISS = {
+    firstDelay: 4, chaseDuration: 5, recovery: .6, damageMultiplier: 1.5,
+    circle: { radius: 240, windup: 2.2, halfAngle: Math.PI },
+    cone: { radius: 520, windup: 1.8, halfAngle: 35 * Math.PI / 180 },
+} as const;
+export const CFG = { duration: ENDLESS_START, speed: 142, pickup: 52, ricePickup: 110, baseHP: 100, enemyCap: 420, spawnInterval: (t: number) => Math.max(.065, .55 - t * .0015), enemyHP: (t: number) => 18 * (1 + t / 45) * (1 + .8 * (t / 600) ** 2) * endlessGrowth(t), xpNeed: (level: number) => Math.round(7 + level * 2.5), contactDamage: 12, enemySpeed: (t: number, elite = false) => (elite ? 52 + Math.min(60, t * .1) : 42 + Math.min(70, t * .12)) * Math.sqrt(endlessGrowth(t)), enemyDamage: (t: number) => 12 * (1 + Math.max(0, t - 180) / 420) * endlessGrowth(t), itemDrops: { heal: .00525, magnet: .002, bomb: .0015 } };
 export type Item = { name: string; short: string; color: string; desc: string; kind: 'weapon' | 'passive'; maxLevel: number; upgrades?: string[]; evo?: string; prerequisite?: number };
 export const ID = { hiss: 0, aura: 1, claw: 2, cooldown: 3, recovery: 4, health: 5, paw: 6, gum: 7, truck: 8, attack: 9, amount: 10, revive: 11, move: 12, xp: 13, pickup: 14, duration: 15, projectileSpeed: 16, range: 17, ear: 18, chicken: 19, luck: 20, bean: 21, honey: 22, mambo: 23 } as const;
 export const ITEMS: Item[] = [
@@ -24,7 +30,7 @@ export const ITEMS: Item[] = [
     { name: '攻击范围', short: '范', color: '#b1d6a3', desc: '范围每级＋10%，叮咚鸡除外', kind: 'passive', maxLevel: 5 },
     { name: '妙脆角', short: '耳', color: '#c9b69a', desc: '旋转猫耳向上抛射，穿透沿途敌人', kind: 'weapon', maxLevel: 8, evo: '妙脆角·满天脆', prerequisite: ID.attack },
     { name: '叮咚鸡', short: '鸡', color: '#f1ce75', desc: '突脸清屏，概率保留本次击杀掉落', kind: 'weapon', maxLevel: 8, evo: '叮咚鸡·开饭', prerequisite: ID.luck },
-    { name: '幸运🍀', short: '幸', color: '#98cf8b', desc: '提高道具掉率、多项宝箱与双倍小米概率', kind: 'passive', maxLevel: 5 },
+    { name: '幸运', short: '幸', color: '#98cf8b', desc: '提高道具掉率、多项宝箱与双倍小米概率', kind: 'passive', maxLevel: 5 },
     { name: '南北绿豆', short: '豆', color: '#a4d277', desc: '瞄准最近敌人，逐颗发射穿透绿豆', kind: 'weapon', maxLevel: 8, evo: '南北绿豆机关炮', prerequisite: ID.cooldown,
       upgrades: ['自动瞄准，发射绿豆', '每批数量＋1', '批次间隔－0.1秒', '伤害＋10', '每批数量＋1', '可命中敌人数＋1', '每批数量＋1', '伤害＋10，间隔－0.1秒'] },
     { name: '蜂蜜', short: '蜜', color: '#edbd58', desc: '蜂蜜罐落地留下持续伤害的蜂蜜池', kind: 'weapon', maxLevel: 8, evo: '蜂蜜海', prerequisite: ID.pickup,
