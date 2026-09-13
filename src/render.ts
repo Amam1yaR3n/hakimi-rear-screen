@@ -1,7 +1,7 @@
 import { Game, SLASH_DURATION, CHICKEN_IMPACT, CHICKEN_DURATION } from './game';
 import type { EliteHiss } from './game';
 import { W, H, SAFE, ANCHOR, ITEMS, ID, ELITE_HISS } from './config';
-import { characterSprite } from './sprites';
+import { characterSprite, spinosaurusSprite } from './sprites';
 import { drawAbilityIcon } from './icons';
 export type Button = {
     x: number;
@@ -80,6 +80,14 @@ export class Renderer {
             if (outlined) { c.strokeStyle = ink; c.lineWidth = 2.8; c.stroke(); }
         };
         this.ellipse(0, 28, 39, 7, '#00000028');
+        const sprite = spinosaurusSprite(flash);
+        if (sprite) {
+            // The normalized sprite's feet sit at 248/256; anchor them at y=28.
+            const bounce = Math.abs(Math.sin(t * 10)) * 2 * movement;
+            c.drawImage(sprite, -48, -65 - bounce, 96, 96);
+            c.restore();
+            return;
+        }
         // A filled, tapering tail keeps the silhouette smooth even at pickup size.
         c.beginPath(); c.moveTo(-25,-15);
         c.bezierCurveTo(-44,-29,-48,-8,-44,11);

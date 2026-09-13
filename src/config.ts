@@ -1,4 +1,4 @@
-const ENDLESS_START = 480;
+const ENDLESS_START = 360;
 const endlessGrowth = (t: number) => 1 + Math.max(0, t - ENDLESS_START) / 120;
 export const W = 904, H = 572, SAFE = 271.2, ANCHOR = { x: 588, y: 330 };
 export const ELITE_HISS = {

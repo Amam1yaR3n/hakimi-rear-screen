@@ -1,0 +1,9 @@
+Generated with built-in image_gen; reference: public/assets/characters/hakimi.png
+
+Use case: stylized-concept
+Asset type: single isolated 2D game character review sprite.
+Input image: reference image of the existing protagonist Hakimi; preserve its identity, grey taupe tabby fur, dark forehead and cheek stripes, creamy white muzzle chest and paws, pink inner ears and muted pink nose, black eyes with tiny white highlights and thick nearly black outlines.
+Primary request: redesign this same cat into its “棘背龙” arched-back hissing form. This is a stylized angry CAT doing an exaggerated scared-cat arch, not an actual dinosaur. Full body in readable side / slight three-quarter view facing right, face turned slightly toward viewer. Extremely high curved arched back, head lowered at the front, four short braced legs planted apart, stiff puffed curved tail behind. Several large pointed tufts of raised back fur create a dinosaur-like spiky silhouette while remaining cat fur. Open hissing mouth, two tiny upper fangs, small pink tongue, flattened outward ears, expressive fierce-but-cute eyes. Recognizably the exact reference character transformed.
+Style: highly cartoonified, flat graphic illustration, bold clean smooth outlines, broad simple solid color shapes, deliberately simplified tabby stripes, polished expressive silhouette readable at 72 pixels. Match the reference's cute proportions and limited muted palette. No realistic fur, no textures, no gradients, no 3D lighting, no complicated shading.
+Composition: ONE character only, centered, whole tail ears feet visible, modest clear padding, no panels, no labels, no lettering, no watermark, no ground or cast shadow.
+Background: genuinely transparent alpha background, PNG output preferred; do not draw a checkerboard or colored background.

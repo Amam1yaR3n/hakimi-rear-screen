@@ -1,5 +1,7 @@
 # 角色素材
 
+棘背龙形态使用用户审核通过的 `hakimi-arched-hiss.png`，来源为 `output/character-drafts/hakimi-arched-hiss-v1.png`。玩家变身和形态拾取物共用此素材，以原比例绘制，支持移动起伏、倾斜及受击闪光；加载失败时保留程序绘制作为回退。生成提示词见 `output/character-drafts/hakimi-arched-hiss-v1-prompt.txt`。
+
 内置 image_gen 生成，并按用户反馈进一步扁平化。角色顺序：哈基米（玩家）、耄耋（精英）、大狗叫（普通敌人）。
 
 已实装用户提供的抠图透明 PNG：`image (1).png` → `hakimi.png`，`image.png` → `maodie.png`，`image (2).png` → `dagoujiao.png`。后续替换本目录同名透明 PNG 并刷新即可，无需修改代码。透明留白会自动适配，素材会预缓存为 256×256 并生成受击闪白版本。没有透明背景或加载失败时仍显示原程序绘制角色。

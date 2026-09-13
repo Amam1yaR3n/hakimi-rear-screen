@@ -351,7 +351,7 @@ export class Game {
         if (e.elite) this.drops.push({ x: e.x, y: e.y, chest: true, value: 0 });
         if (!rewards) return;
         if (!e.elite) {
-            const doubled = this.luck > 0 && this.rng() < this.luck / 10;
+            const doubled = this.luck > 0 && this.rng() < this.luck * .05;
             this.drops.push({ x: e.x, y: e.y, chest: false, value: 2 * riceMultiplier * (doubled ? 2 : 1) });
         }
         const roll = this.rng(), dropMultiplier = 1 + .2 * this.luck;
@@ -563,7 +563,7 @@ export class Game {
             [ID.range]: `攻击范围（叮咚鸡除外） +${l * 10}%`, [ID.cooldown]: `攻击冷却 −${l * 8}%`, [ID.recovery]: `每秒恢复 ${fmt(l * .35)} 生命`, [ID.health]: `最大生命 +${l * 20}`,
             [ID.attack]: `伤害（叮咚鸡除外） +${l * 10}%`, [ID.amount]: `攻击数量 +${l}（光环、大运、叮咚鸡、曼波除外）`, [ID.move]: `移动速度 / 蜂蜜海移动与成长 +${l * 10}%`, [ID.xp]: `经验获取 +${l * 10}%`, [ID.pickup]: `吸取范围 +${l * 20}%`, [ID.duration]: `糖块 / 卡车 / 猫耳 / 蜂蜜 / 曼波持续 +${l * 10}%`, [ID.projectileSpeed]: `糖块转速 / 卡车车速 / 猫耳速度 / 绿豆速度 / 蜂蜜海移动与成长 +${l * 10}%`,
         };
-        if (id === ID.luck) return `道具掉率 +${l * 20}% · 三项/五项宝箱 ${25 + l * 3}%/${5 + l}% · 双倍小米 ${l * 10}%`;
+        if (id === ID.luck) return `道具掉率 +${l * 20}% · 三项/五项宝箱 ${25 + l * 3}%/${5 + l}% · 双倍小米 ${l * 5}%`;
         if (ITEMS[id].kind === 'passive') return passive[id];
         if (id === ID.bean) { const s = this.beanStats; return `${s.count}颗/批 · 伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 每颗命中${s.pierce}敌 · 速度${fmt(s.speed)} · 半径${fmt(s.radius)} · 寿命3秒 · 持续时间无效`; }
         if (id === ID.honey) { const s = this.honeyStats; return `${s.count}罐/批 · 每0.5秒伤害${fmt(s.damage)} · 间隔${fmt(s.interval)}秒 · 持续${fmt(s.life)}秒 · 半径${fmt(s.radius)} · ${this.evolved[id] ? '向角色汇聚并扩大至两倍；子弹速度、移动速度增强成长' : '固定地面；子弹速度、移动速度无效'} · 无减速；吸取范围仅为进化条件`; }

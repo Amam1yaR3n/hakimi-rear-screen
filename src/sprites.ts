@@ -1,4 +1,4 @@
-const names = ['hakimi', 'maodie', 'dagoujiao', 'maodie-hiss'] as const;
+const names = ['hakimi', 'maodie', 'dagoujiao', 'maodie-hiss', 'hakimi-arched-hiss'] as const;
 type Sprite = { normal: HTMLCanvasElement; flash: HTMLCanvasElement };
 const sprites: (Sprite | undefined)[] = [];
 
@@ -42,5 +42,10 @@ export const characterSpritesReady = Promise.all(names.map(async (name, type) =>
 
 export function characterSprite(type: number, flash: boolean, hissing = false) {
     const sprite = type === 1 && hissing ? sprites[3] ?? sprites[type] : sprites[type];
+    return flash ? sprite?.flash : sprite?.normal;
+}
+
+export function spinosaurusSprite(flash: boolean) {
+    const sprite = sprites[4];
     return flash ? sprite?.flash : sprite?.normal;
 }
